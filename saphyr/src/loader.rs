@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use hashlink::LinkedHashMap;
 use saphyr_parser::{Event, ScanError, Span, SpannedEventReceiver, TScalarStyle, Tag};
 
-use crate::{Hash, Yaml};
+use crate::{Map, Yaml};
 
 /// Main structure for parsing YAML.
 ///
@@ -62,9 +62,13 @@ where
                     _ => unreachable!(),
                 }
             }
-            Event::SequenceStart(aid, _) => {
+            Event::SequenceStart(aid, tag) => {
                 self.doc_stack.push((
-                    Node::from_bare_yaml(Yaml::Array(Vec::new())).with_span(span),
+                    Node::from_bare_yaml(Yaml::Sequence {
+                        value: Vec::new(),
+                        tag,
+                    })
+                    .with_span(span),
                     aid,
                 ));
             }
@@ -72,9 +76,13 @@ where
                 let node = self.doc_stack.pop().unwrap();
                 self.insert_new_node(node);
             }
-            Event::MappingStart(aid, _) => {
+            Event::MappingStart(aid, tag) => {
                 self.doc_stack.push((
-                    Node::from_bare_yaml(Yaml::Hash(Hash::new())).with_span(span),
+                    Node::from_bare_yaml(Yaml::Map {
+                        value: Map::new(),
+                        tag,
+                    })
+                    .with_span(span),
                     aid,
                 ));
                 self.key_stack.push(Node::from_bare_yaml(Yaml::BadValue));
@@ -86,7 +94,7 @@ where
             }
             Event::Scalar(v, style, aid, tag) => {
                 let node = if style != TScalarStyle::Plain {
-                    Yaml::String(v)
+                    Yaml::String { value: v, tag }
                 } else if let Some(Tag {
                     ref handle,
                     ref suffix,
@@ -98,25 +106,25 @@ where
                                 // "true" or "false"
                                 match v.parse::<bool>() {
                                     Err(_) => Yaml::BadValue,
-                                    Ok(v) => Yaml::Boolean(v),
+                                    Ok(value) => Yaml::Boolean { value, tag },
                                 }
                             }
                             "int" => match v.parse::<i64>() {
                                 Err(_) => Yaml::BadValue,
-                                Ok(v) => Yaml::Integer(v),
+                                Ok(value) => Yaml::Integer { value, tag },
                             },
                             "float" => match parse_f64(&v) {
-                                Some(_) => Yaml::Real(v),
+                                Some(_) => Yaml::Real { value: v, tag },
                                 None => Yaml::BadValue,
                             },
                             "null" => match v.as_ref() {
                                 "~" | "null" => Yaml::Null,
                                 _ => Yaml::BadValue,
                             },
-                            _ => Yaml::String(v),
+                            _ => Yaml::String { value: v, tag },
                         }
                     } else {
-                        Yaml::String(v)
+                        Yaml::String { value: v, tag }
                     }
                 } else {
                     // Datatype is not specified, or unrecognized
@@ -264,11 +272,11 @@ impl LoadableYamlNode for Yaml {
     }
 
     fn is_array(&self) -> bool {
-        matches!(self, Yaml::Array(_))
+        matches!(self, Yaml::Sequence{..})
     }
 
     fn is_hash(&self) -> bool {
-        matches!(self, Yaml::Hash(_))
+        matches!(self, Yaml::Map{..})
     }
 
     fn is_badvalue(&self) -> bool {
@@ -276,7 +284,7 @@ impl LoadableYamlNode for Yaml {
     }
 
     fn array_mut(&mut self) -> &mut Vec<Self> {
-        if let Yaml::Array(x) = self {
+        if let Yaml::Sequence { value: ref mut x, .. } = self {
             x
         } else {
             panic!("Called array_mut on a non-array");
@@ -284,7 +292,7 @@ impl LoadableYamlNode for Yaml {
     }
 
     fn hash_mut(&mut self) -> &mut LinkedHashMap<Self, Self> {
-        if let Yaml::Hash(x) = self {
+        if let Yaml::Map { value: ref mut x, .. } = self {
             x
         } else {
             panic!("Called hash_mut on a non-hash");

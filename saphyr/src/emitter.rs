@@ -1,7 +1,7 @@
 //! YAML serialization helpers.
 
 use crate::char_traits;
-use crate::yaml::{Hash, Yaml};
+use crate::yaml::{Map, Yaml};
 use std::convert::From;
 use std::error::Error;
 use std::fmt::{self, Display};
@@ -212,9 +212,9 @@ impl<'a> YamlEmitter<'a> {
 
     fn emit_node(&mut self, node: &Yaml) -> EmitResult {
         match *node {
-            Yaml::Array(ref v) => self.emit_array(v),
-            Yaml::Hash(ref h) => self.emit_hash(h),
-            Yaml::String(ref v) => {
+            Yaml::Sequence { value: ref v, .. } => self.emit_array(v),
+            Yaml::Map { value: ref h, .. } => self.emit_hash(h),
+            Yaml::String { value: ref v, .. } => {
                 if self.multiline_strings
                     && v.contains('\n')
                     && char_traits::is_valid_literal_block_scalar(v)
@@ -227,7 +227,7 @@ impl<'a> YamlEmitter<'a> {
                 }
                 Ok(())
             }
-            Yaml::Boolean(v) => {
+            Yaml::Boolean { value: v, .. } => {
                 if v {
                     self.writer.write_str("true")?;
                 } else {
@@ -235,11 +235,11 @@ impl<'a> YamlEmitter<'a> {
                 }
                 Ok(())
             }
-            Yaml::Integer(v) => {
+            Yaml::Integer { value: v, .. } => {
                 write!(self.writer, "{v}")?;
                 Ok(())
             }
-            Yaml::Real(ref v) => {
+            Yaml::Real { value: ref v, .. } => {
                 write!(self.writer, "{v}")?;
                 Ok(())
             }
@@ -290,13 +290,13 @@ impl<'a> YamlEmitter<'a> {
         Ok(())
     }
 
-    fn emit_hash(&mut self, h: &Hash) -> EmitResult {
+    fn emit_hash(&mut self, h: &Map) -> EmitResult {
         if h.is_empty() {
             self.writer.write_str("{}")?;
         } else {
             self.level += 1;
             for (cnt, (k, v)) in h.iter().enumerate() {
-                let complex_key = matches!(*k, Yaml::Hash(_) | Yaml::Array(_));
+                let complex_key = matches!(*k, Yaml::Map { .. } | Yaml::Sequence { .. });
                 if cnt > 0 {
                     writeln!(self.writer)?;
                     self.write_indent()?;
@@ -325,7 +325,7 @@ impl<'a> YamlEmitter<'a> {
     /// and short enough to respect the compact flag.
     fn emit_val(&mut self, inline: bool, val: &Yaml) -> EmitResult {
         match *val {
-            Yaml::Array(ref v) => {
+            Yaml::Sequence { value: ref v, .. } => {
                 if (inline && self.compact) || v.is_empty() {
                     write!(self.writer, " ")?;
                 } else {
@@ -336,7 +336,7 @@ impl<'a> YamlEmitter<'a> {
                 }
                 self.emit_array(v)
             }
-            Yaml::Hash(ref h) => {
+            Yaml::Map { value: ref h, .. } => {
                 if (inline && self.compact) || h.is_empty() {
                     write!(self.writer, " ")?;
                 } else {

@@ -32,6 +32,7 @@ pub struct BufferedInput<T: Iterator<Item = char>> {
 
 impl<T: Iterator<Item = char>> BufferedInput<T> {
     /// Create a new [`BufferedInput`] with the given input.
+    #[inline(always)]
     pub fn new(input: T) -> Self {
         Self {
             input,

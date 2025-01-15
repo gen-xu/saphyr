@@ -9,7 +9,7 @@ macro_rules! define_as (
 #[must_use]
 pub fn $fn_name(&self) -> Option<$t> {
     match *self {
-        Self::$variant(v) => Some(v),
+        Self::$variant{ value, .. } => Some(value),
         _ => None
     }
 }
@@ -27,7 +27,7 @@ macro_rules! define_as_ref (
 #[must_use]
 pub fn $fn_name(&self) -> Option<$t> {
     match *self {
-        Self::$variant(ref v) => Some(v),
+        Self::$variant{ value: ref v, .. } => Some(v),
         _ => None
     }
 }
@@ -45,7 +45,7 @@ macro_rules! define_as_mut_ref (
 #[must_use]
 pub fn $fn_name(&mut self) -> Option<$t> {
     match *self {
-        Self::$variant(ref mut v) => Some(v),
+        Self::$variant{ value: ref mut v, .. } => Some(v),
         _ => None
     }
 }
@@ -63,7 +63,7 @@ macro_rules! define_into (
 #[must_use]
 pub fn $fn_name(self) -> Option<$t> {
     match self {
-        Self::$variant(v) => Some(v),
+        Self::$variant{ value: v, .. } => Some(v),
         _ => None
     }
 }

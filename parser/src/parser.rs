@@ -88,7 +88,7 @@ pub enum Event {
 }
 
 /// A YAML tag.
-#[derive(Clone, PartialEq, Debug, Eq)]
+#[derive(Clone, PartialEq, Debug, Eq, Ord, PartialOrd, Hash)]
 pub struct Tag {
     /// Handle of the tag (`!` included).
     pub handle: String,

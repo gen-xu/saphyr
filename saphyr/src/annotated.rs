@@ -5,6 +5,7 @@ pub mod marked_yaml;
 use std::ops::{Index, IndexMut};
 
 use hashlink::LinkedHashMap;
+use saphyr_parser::Tag;
 
 use crate::loader::parse_f64;
 
@@ -45,19 +46,25 @@ where
 {
     /// Float types are stored as String and parsed on demand.
     /// Note that `f64` does NOT implement Eq trait and can NOT be stored in `BTreeMap`.
-    Real(String),
+    Real { value: String, tag: Option<Tag> },
     /// YAML int is stored as i64.
-    Integer(i64),
+    Integer { value: i64, tag: Option<Tag> },
     /// YAML scalar.
-    String(String),
+    String { value: String, tag: Option<Tag> },
     /// YAML bool, e.g. `true` or `false`.
-    Boolean(bool),
+    Bool { value: bool, tag: Option<Tag> },
     /// YAML array, can be accessed as a `Vec`.
-    Array(AnnotatedArray<Node>),
+    Sequence {
+        value: AnnotatedSequence<Node>,
+        tag: Option<Tag>,
+    },
     /// YAML hash, can be accessed as a `LinkedHashMap`.
     ///
     /// Insertion order will match the order of insertion into the map.
-    Hash(AnnotatedHash<Node>),
+    Map {
+        value: AnnotatedMap<Node>,
+        tag: Option<Tag>,
+    },
     /// Alias, not fully supported yet.
     Alias(usize),
     /// YAML null, e.g. `null` or `~`.
@@ -70,40 +77,52 @@ where
 
 /// The type contained in the [`YamlData::Array`] variant. This corresponds to YAML sequences.
 #[allow(clippy::module_name_repetitions)]
-pub type AnnotatedArray<Node> = Vec<Node>;
+pub type AnnotatedSequence<Node> = Vec<Node>;
 /// The type contained in the [`YamlData::Hash`] variant. This corresponds to YAML mappings.
 #[allow(clippy::module_name_repetitions)]
-pub type AnnotatedHash<Node> = LinkedHashMap<Node, Node>;
+pub type AnnotatedMap<Node> = LinkedHashMap<Node, Node>;
 
 impl<Node> YamlData<Node>
 where
     Node: std::hash::Hash + std::cmp::Eq + From<Self>,
 {
-    define_as!(as_bool, bool, Boolean);
+    define_as!(as_bool, bool, Bool);
     define_as!(as_i64, i64, Integer);
 
-    define_as_ref!(as_hash, &AnnotatedHash<Node>, Hash);
+    define_as_ref!(as_map, &AnnotatedMap<Node>, Map);
     define_as_ref!(as_str, &str, String);
-    define_as_ref!(as_vec, &AnnotatedArray<Node>, Array);
+    define_as_ref!(as_sequence, &AnnotatedSequence<Node>, Sequence);
 
-    define_as_mut_ref!(as_mut_hash, &mut AnnotatedHash<Node>, Hash);
-    define_as_mut_ref!(as_mut_vec, &mut AnnotatedArray<Node>, Array);
+    define_as_mut_ref!(as_map_mut, &mut AnnotatedMap<Node>, Map);
+    define_as_mut_ref!(as_sequence_mut, &mut AnnotatedSequence<Node>, Sequence);
 
-    define_into!(into_bool, bool, Boolean);
-    define_into!(into_hash, AnnotatedHash<Node>, Hash);
+    define_into!(into_bool, bool, Bool);
+    define_into!(into_map, AnnotatedMap<Node>, Map);
     define_into!(into_i64, i64, Integer);
     define_into!(into_string, String, String);
-    define_into!(into_vec, AnnotatedArray<Node>, Array);
+    define_into!(into_sequence, AnnotatedSequence<Node>, Sequence);
 
     define_is!(is_alias, Self::Alias(_));
-    define_is!(is_array, Self::Array(_));
+    define_is!(is_sequence, Self::Sequence { .. });
     define_is!(is_badvalue, Self::BadValue);
-    define_is!(is_boolean, Self::Boolean(_));
-    define_is!(is_hash, Self::Hash(_));
-    define_is!(is_integer, Self::Integer(_));
+    define_is!(is_boolean, Self::Bool { .. });
+    define_is!(is_map, Self::Map { .. });
+    define_is!(is_integer, Self::Integer { .. });
     define_is!(is_null, Self::Null);
-    define_is!(is_real, Self::Real(_));
-    define_is!(is_string, Self::String(_));
+    define_is!(is_real, Self::Real { .. });
+    define_is!(is_string, Self::String { .. });
+
+    pub fn get_tag(&self) -> Option<&Tag> {
+        match self {
+            YamlData::Real { tag, .. } => tag.as_ref(),
+            YamlData::Integer { tag, .. } => tag.as_ref(),
+            YamlData::String { tag, .. } => tag.as_ref(),
+            YamlData::Bool { tag, .. } => tag.as_ref(),
+            YamlData::Sequence { tag, .. } => tag.as_ref(),
+            YamlData::Map { tag, .. } => tag.as_ref(),
+            _ => None,
+        }
+    }
 
     /// Return the `f64` value contained in this YAML node.
     ///
@@ -111,8 +130,8 @@ where
     /// string, `None` is returned.
     #[must_use]
     pub fn as_f64(&self) -> Option<f64> {
-        if let Self::Real(ref v) = self {
-            parse_f64(v)
+        if let Self::Real { value, .. } = self {
+            parse_f64(value)
         } else {
             None
         }
@@ -169,8 +188,11 @@ where
     ///
     /// This function also panics if `self` is not a [`YamlData::Hash`].
     fn index(&self, idx: &'a str) -> &Node {
-        let key = Self::String(idx.to_owned());
-        match self.as_hash() {
+        let key = Self::String {
+            value: idx.to_owned(),
+            tag: None,
+        };
+        match self.as_map() {
             Some(h) => h.get(&key.into()).unwrap(),
             None => panic!("{idx}: key does not exist"),
         }
@@ -188,8 +210,11 @@ where
     ///
     /// This function also panics if `self` is not a [`YamlData::Hash`].
     fn index_mut(&mut self, idx: &'a str) -> &mut Node {
-        let key = Self::String(idx.to_owned());
-        match self.as_mut_hash() {
+        let key = Self::String {
+            value: idx.to_owned(),
+            tag: None,
+        };
+        match self.as_map_mut() {
             Some(h) => h.get_mut(&key.into()).unwrap(),
             None => panic!("Not a hash type"),
         }
@@ -212,10 +237,13 @@ where
     ///
     /// This function also panics if `self` is not a [`YamlData::Array`] nor a [`YamlData::Hash`].
     fn index(&self, idx: usize) -> &Node {
-        if let Some(v) = self.as_vec() {
+        if let Some(v) = self.as_sequence() {
             v.get(idx).unwrap()
-        } else if let Some(v) = self.as_hash() {
-            let key = Self::Integer(i64::try_from(idx).unwrap());
+        } else if let Some(v) = self.as_map() {
+            let key = Self::Integer {
+                value: i64::try_from(idx).unwrap(),
+                tag: None,
+            };
             v.get(&key.into()).unwrap()
         } else {
             panic!("{idx}: Index out of bounds");
@@ -238,9 +266,14 @@ where
     /// This function also panics if `self` is not a [`YamlData::Array`] nor a [`YamlData::Hash`].
     fn index_mut(&mut self, idx: usize) -> &mut Node {
         match self {
-            Self::Array(sequence) => sequence.index_mut(idx),
-            Self::Hash(mapping) => {
-                let key = Self::Integer(i64::try_from(idx).unwrap());
+            Self::Sequence {
+                value: sequence, ..
+            } => sequence.index_mut(idx),
+            Self::Map { value: mapping, .. } => {
+                let key = Self::Integer {
+                    value: i64::try_from(idx).unwrap(),
+                    tag: None,
+                };
                 mapping.get_mut(&key.into()).unwrap()
             }
             _ => panic!("Attempting to index but `self` is not a sequence nor a mapping"),
@@ -257,7 +290,7 @@ where
 
     fn into_iter(self) -> Self::IntoIter {
         Self::IntoIter {
-            yaml: self.into_vec().unwrap_or_default().into_iter(),
+            yaml: self.into_sequence().unwrap_or_default().into_iter(),
         }
     }
 }

@@ -43,6 +43,7 @@ impl MarkedYaml {
     /// Returns `ScanError` when loading fails.
     ///
     /// [`load_from_str`]: `Yaml::load_from_str`
+    #[inline(always)]
     pub fn load_from_iter<I: Iterator<Item = char>>(source: I) -> Result<Vec<Self>, ScanError> {
         let mut parser = Parser::new(BufferedInput::new(source));
         Self::load_from_parser(&mut parser)
@@ -56,6 +57,7 @@ impl MarkedYaml {
     /// Returns `ScanError` when loading fails.
     ///
     /// [`load_from_str`]: `Yaml::load_from_str`
+    #[inline(always)]
     pub fn load_from_parser<I: Input>(parser: &mut Parser<I>) -> Result<Vec<Self>, ScanError> {
         let mut loader = YamlLoader::<Self>::default();
         parser.load(&mut loader, true)?;
@@ -92,13 +94,16 @@ impl LoadableYamlNode for MarkedYaml {
         Self {
             span: Span::default(),
             data: match yaml {
-                Yaml::Real(x) => YamlData::Real(x),
-                Yaml::Integer(x) => YamlData::Integer(x),
-                Yaml::String(x) => YamlData::String(x),
-                Yaml::Boolean(x) => YamlData::Boolean(x),
+                Yaml::Real { value, tag } => YamlData::Real { value, tag },
+                Yaml::Integer { value, tag } => YamlData::Integer { value, tag },
+                Yaml::String { value, tag } => YamlData::String { value, tag },
+                Yaml::Boolean { value, tag } => YamlData::Bool { value, tag },
                 // Array and Hash will always have their container empty.
-                Yaml::Array(_) => YamlData::Array(vec![]),
-                Yaml::Hash(_) => YamlData::Hash(LinkedHashMap::new()),
+                Yaml::Sequence { value: _, tag } => YamlData::Sequence { value: vec![], tag },
+                Yaml::Map { value: _, tag } => YamlData::Map {
+                    value: LinkedHashMap::new(),
+                    tag,
+                },
                 Yaml::Alias(x) => YamlData::Alias(x),
                 Yaml::Null => YamlData::Null,
                 Yaml::BadValue => YamlData::BadValue,
@@ -107,11 +112,11 @@ impl LoadableYamlNode for MarkedYaml {
     }
 
     fn is_array(&self) -> bool {
-        self.data.is_array()
+        self.data.is_sequence()
     }
 
     fn is_hash(&self) -> bool {
-        self.data.is_hash()
+        self.data.is_map()
     }
 
     fn is_badvalue(&self) -> bool {
@@ -119,16 +124,16 @@ impl LoadableYamlNode for MarkedYaml {
     }
 
     fn array_mut(&mut self) -> &mut Vec<Self> {
-        if let YamlData::Array(x) = &mut self.data {
-            x
+        if let YamlData::Sequence { value, .. } = &mut self.data {
+            value
         } else {
             panic!("Called array_mut on a non-array");
         }
     }
 
     fn hash_mut(&mut self) -> &mut LinkedHashMap<Self, Self> {
-        if let YamlData::Hash(x) = &mut self.data {
-            x
+        if let YamlData::Map { value, .. } = &mut self.data {
+            value
         } else {
             panic!("Called array_mut on a non-array");
         }
