@@ -6,6 +6,8 @@
 pub(crate) mod buffered;
 pub(crate) mod str;
 
+use std::{path::PathBuf, rc::Rc};
+
 #[allow(clippy::module_name_repetitions)]
 pub use buffered::BufferedInput;
 
@@ -22,6 +24,9 @@ pub use crate::char_traits::{
 ///    allocations. Should users need an owned version of the data, they can always `.to_owned()`
 ///    their YAML object.
 pub trait Input {
+    /// file path of the input if any
+    fn path(&self) -> Option<Rc<PathBuf>>;
+
     /// A hint to the input source that we will need to read `count` characters.
     ///
     /// If the input is exhausted, `\0` can be used to pad the last characters and later returned.

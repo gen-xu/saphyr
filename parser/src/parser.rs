@@ -10,7 +10,7 @@ use crate::{
     BufferedInput, Marker,
 };
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
 #[derive(Clone, Copy, PartialEq, Debug, Eq)]
 enum State {
@@ -239,9 +239,9 @@ pub type ParseResult = Result<(Event, Span), ScanError>;
 impl<'a> Parser<StrInput<'a>> {
     /// Create a new instance of a parser from a &str.
     #[must_use]
-    pub fn new_from_str(value: &'a str) -> Self {
+    pub fn new_from_str(value: &'a str, path: Option<Rc<PathBuf>>) -> Self {
         debug_print!("\x1B[;31m>>>>>>>>>> New parser from str\x1B[;0m");
-        Parser::new(StrInput::new(value))
+        Parser::new(StrInput::new(value, path))
     }
 }
 
@@ -253,7 +253,7 @@ where
     #[must_use]
     pub fn new_from_iter(iter: T) -> Self {
         debug_print!("\x1B[;31m>>>>>>>>>> New parser from iter\x1B[;0m");
-        Parser::new(BufferedInput::new(iter))
+        Parser::new(BufferedInput::new(iter, None))
     }
 }
 
@@ -400,7 +400,7 @@ impl<T: Input> Parser<T> {
 
     fn parse(&mut self) -> ParseResult {
         if self.state == State::End {
-            return Ok((Event::StreamEnd, Span::empty(self.scanner.mark())));
+            return Ok((Event::StreamEnd, Span::empty(self.scanner.mark(), self.scanner.path())));
         }
         let (ev, mark) = self.state_machine()?;
         Ok((ev, mark))
@@ -436,7 +436,7 @@ impl<T: Input> Parser<T> {
 
         if self.scanner.stream_ended() {
             // XXX has parsed?
-            recv.on_event(Event::StreamEnd, Span::empty(self.scanner.mark()));
+            recv.on_event(Event::StreamEnd, Span::empty(self.scanner.mark(), self.scanner.path()));
             return Ok(());
         }
         loop {
@@ -582,7 +582,7 @@ impl<T: Input> Parser<T> {
     }
 
     fn stream_start(&mut self) -> ParseResult {
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(span, TokenType::StreamStart(_)) => {
                 self.state = State::ImplicitDocumentStart;
                 self.skip();
@@ -600,7 +600,7 @@ impl<T: Input> Parser<T> {
             self.skip();
         }
 
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(span, TokenType::StreamEnd) => {
                 self.state = State::End;
                 self.skip();
@@ -663,7 +663,7 @@ impl<T: Input> Parser<T> {
 
     fn explicit_document_start(&mut self) -> ParseResult {
         self.parser_process_directives()?;
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(mark, TokenType::DocumentStart) => {
                 self.push_state(State::DocumentEnd);
                 self.state = State::DocumentContent;
@@ -678,7 +678,7 @@ impl<T: Input> Parser<T> {
     }
 
     fn document_content(&mut self) -> ParseResult {
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(
                 mark,
                 TokenType::VersionDirective(..)
@@ -697,7 +697,7 @@ impl<T: Input> Parser<T> {
 
     fn document_end(&mut self) -> ParseResult {
         let mut explicit_end = false;
-        let span: Span = match *self.peek_token()? {
+        let span: Span = match self.peek_token().cloned()? {
             Token(span, TokenType::DocumentEnd) => {
                 explicit_end = true;
                 self.skip();
@@ -713,7 +713,7 @@ impl<T: Input> Parser<T> {
             self.state = State::ImplicitDocumentStart;
         } else {
             if let Token(span, TokenType::VersionDirective(..) | TokenType::TagDirective(..)) =
-                *self.peek_token()?
+                self.peek_token().cloned()?
             {
                 return Err(ScanError::new_str(
                     span.start,
@@ -741,7 +741,7 @@ impl<T: Input> Parser<T> {
     fn parse_node(&mut self, block: bool, indentless_sequence: bool) -> ParseResult {
         let mut anchor_id = 0;
         let mut tag = None;
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(_, TokenType::Alias(_)) => {
                 self.pop_state();
                 if let Token(span, TokenType::Alias(name)) = self.fetch_token() {
@@ -787,7 +787,7 @@ impl<T: Input> Parser<T> {
             }
             _ => {}
         }
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(mark, TokenType::BlockEntry) if indentless_sequence => {
                 self.state = State::IndentlessSequenceEntry;
                 Ok((Event::SequenceStart(anchor_id, tag), mark))
@@ -835,11 +835,11 @@ impl<T: Input> Parser<T> {
             //self.marks.push(tok.0);
             self.skip();
         }
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(_, TokenType::Key) => {
                 self.skip();
                 if let Token(mark, TokenType::Key | TokenType::Value | TokenType::BlockEnd) =
-                    *self.peek_token()?
+                    self.peek_token().cloned()?
                 {
                     self.state = State::BlockMappingValue;
                     // empty scalar
@@ -867,11 +867,11 @@ impl<T: Input> Parser<T> {
     }
 
     fn block_mapping_value(&mut self) -> ParseResult {
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(_, TokenType::Value) => {
                 self.skip();
                 if let Token(mark, TokenType::Key | TokenType::Value | TokenType::BlockEnd) =
-                    *self.peek_token()?
+                    self.peek_token().cloned()?
                 {
                     self.state = State::BlockMappingKey;
                     // empty scalar
@@ -895,11 +895,11 @@ impl<T: Input> Parser<T> {
             self.skip();
         }
         let span: Span = {
-            match *self.peek_token()? {
+            match self.peek_token().cloned()? {
                 Token(mark, TokenType::FlowMappingEnd) => mark,
                 Token(mark, _) => {
                     if !first {
-                        match *self.peek_token()? {
+                        match self.peek_token().cloned()? {
                             Token(_, TokenType::FlowEntry) => self.skip(),
                             Token(span, _) => return Err(ScanError::new_str(
                                 span.start,
@@ -908,13 +908,13 @@ impl<T: Input> Parser<T> {
                         }
                     }
 
-                    match *self.peek_token()? {
+                    match self.peek_token().cloned()? {
                         Token(_, TokenType::Key) => {
                             self.skip();
                             if let Token(
                                 mark,
                                 TokenType::Value | TokenType::FlowEntry | TokenType::FlowMappingEnd,
-                            ) = *self.peek_token()?
+                            ) = self.peek_token().cloned()?
                             {
                                 self.state = State::FlowMappingValue;
                                 return Ok((Event::empty_scalar(), mark));
@@ -946,11 +946,11 @@ impl<T: Input> Parser<T> {
     fn flow_mapping_value(&mut self, empty: bool) -> ParseResult {
         let span: Span = {
             if empty {
-                let Token(mark, _) = *self.peek_token()?;
+                let Token(mark, _) = self.peek_token().cloned()?;
                 self.state = State::FlowMappingKey;
                 return Ok((Event::empty_scalar(), mark));
             }
-            match *self.peek_token()? {
+            match self.peek_token().cloned()? {
                 Token(span, TokenType::Value) => {
                     self.skip();
                     match self.peek_token()?.1 {
@@ -977,7 +977,7 @@ impl<T: Input> Parser<T> {
             //self.marks.push(tok.0);
             self.skip();
         }
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(mark, TokenType::FlowSequenceEnd) => {
                 self.pop_state();
                 self.skip();
@@ -994,7 +994,7 @@ impl<T: Input> Parser<T> {
             }
             _ => { /* next */ }
         }
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(mark, TokenType::FlowSequenceEnd) => {
                 self.pop_state();
                 self.skip();
@@ -1013,7 +1013,7 @@ impl<T: Input> Parser<T> {
     }
 
     fn indentless_sequence_entry(&mut self) -> ParseResult {
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(_, TokenType::BlockEntry) => (),
             Token(mark, _) => {
                 self.pop_state();
@@ -1024,7 +1024,7 @@ impl<T: Input> Parser<T> {
         if let Token(
             mark,
             TokenType::BlockEntry | TokenType::Key | TokenType::Value | TokenType::BlockEnd,
-        ) = *self.peek_token()?
+        ) = self.peek_token().cloned()?
         {
             self.state = State::IndentlessSequenceEntry;
             Ok((Event::empty_scalar(), mark))
@@ -1041,7 +1041,7 @@ impl<T: Input> Parser<T> {
             //self.marks.push(tok.0);
             self.skip();
         }
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(mark, TokenType::BlockEnd) => {
                 self.pop_state();
                 self.skip();
@@ -1050,7 +1050,7 @@ impl<T: Input> Parser<T> {
             Token(_, TokenType::BlockEntry) => {
                 self.skip();
                 if let Token(mark, TokenType::BlockEntry | TokenType::BlockEnd) =
-                    *self.peek_token()?
+                    self.peek_token().cloned()?
                 {
                     self.state = State::BlockSequenceEntry;
                     Ok((Event::empty_scalar(), mark))
@@ -1068,7 +1068,7 @@ impl<T: Input> Parser<T> {
 
     fn flow_sequence_entry_mapping_key(&mut self) -> ParseResult {
         if let Token(mark, TokenType::Value | TokenType::FlowEntry | TokenType::FlowSequenceEnd) =
-            *self.peek_token()?
+            self.peek_token().cloned()?
         {
             self.skip();
             self.state = State::FlowSequenceEntryMappingValue;
@@ -1080,11 +1080,11 @@ impl<T: Input> Parser<T> {
     }
 
     fn flow_sequence_entry_mapping_value(&mut self) -> ParseResult {
-        match *self.peek_token()? {
+        match self.peek_token().cloned()? {
             Token(_, TokenType::Value) => {
                 self.skip();
                 self.state = State::FlowSequenceEntryMappingValue;
-                let Token(span, ref tok) = *self.peek_token()?;
+                let Token(span, ref tok) = self.peek_token().cloned()?;
                 if matches!(tok, TokenType::FlowEntry | TokenType::FlowSequenceEnd) {
                     self.state = State::FlowSequenceEntryMappingEnd(span.end);
                     Ok((Event::empty_scalar(), span))
@@ -1103,7 +1103,7 @@ impl<T: Input> Parser<T> {
     #[allow(clippy::unnecessary_wraps)]
     fn flow_sequence_entry_mapping_end(&mut self, mark: Marker) -> ParseResult {
         self.state = State::FlowSequenceEntry;
-        Ok((Event::MappingEnd, Span::empty(mark)))
+        Ok((Event::MappingEnd, Span::empty(mark, self.scanner.path())))
     }
 
     /// Resolve a tag from the handle and the suffix.
@@ -1182,7 +1182,7 @@ a4:
     - 2
 a5: *x
 ";
-        let mut p = Parser::new_from_str(s);
+        let mut p = Parser::new_from_str(s, None);
         loop {
             let event_peek = p.peek().unwrap().unwrap().clone();
             let event = p.next_event().unwrap().unwrap();
@@ -1203,7 +1203,7 @@ foo: "bar"
 --- !t!2 &2
 baz: "qux"
 "#;
-        for x in Parser::new_from_str(text).keep_tags(true) {
+        for x in Parser::new_from_str(text, None).keep_tags(true) {
             let x = x.unwrap();
             if let Event::MappingStart(_, tag) = x.0 {
                 let tag = tag.unwrap();
@@ -1211,7 +1211,7 @@ baz: "qux"
             }
         }
 
-        for x in Parser::new_from_str(text).keep_tags(false) {
+        for x in Parser::new_from_str(text, None).keep_tags(false) {
             if x.is_err() {
                 // Test successful
                 return;

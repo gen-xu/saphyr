@@ -1,3 +1,6 @@
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
+
 use crate::char_traits::is_breakz;
 use crate::input::Input;
 
@@ -24,6 +27,8 @@ const BUFFER_LEN: usize = 16;
 /// of itertools for one method, we use this structure.
 #[allow(clippy::module_name_repetitions)]
 pub struct BufferedInput<T: Iterator<Item = char>> {
+    /// file path of the input if any
+    file: Option<Rc<PathBuf>>,
     /// The iterator source,
     input: T,
     /// Buffer for the next characters to consume.
@@ -33,8 +38,9 @@ pub struct BufferedInput<T: Iterator<Item = char>> {
 impl<T: Iterator<Item = char>> BufferedInput<T> {
     /// Create a new [`BufferedInput`] with the given input.
     #[inline(always)]
-    pub fn new(input: T) -> Self {
+    pub fn new(input: T, file: Option<PathBuf>) -> Self {
         Self {
+            file: file.map(|x| Rc::new(x)),
             input,
             buffer: ArrayDeque::default(),
         }
@@ -42,6 +48,10 @@ impl<T: Iterator<Item = char>> BufferedInput<T> {
 }
 
 impl<T: Iterator<Item = char>> Input for BufferedInput<T> {
+    fn path(&self) -> Option<Rc<PathBuf>> {
+        self.file.clone()
+    }
+
     #[inline]
     fn lookahead(&mut self, count: usize) {
         if self.buffer.len() >= count {

@@ -53,11 +53,12 @@ mod yaml;
 
 // Re-export main components.
 pub use crate::annotated::{
-    marked_yaml::MarkedYaml, AnnotatedSequence, AnnotatedMap, AnnotatedYamlIter, YamlData,
+    marked_yaml::LoadError, marked_yaml::MarkedYaml, AnnotatedMap, AnnotatedSequence,
+    AnnotatedYamlIter, YamlData,
 };
 pub use crate::emitter::YamlEmitter;
 pub use crate::loader::{LoadableYamlNode, YamlLoader};
-pub use crate::yaml::{Sequence, Map, Yaml, YamlIter};
+pub use crate::yaml::{Map, Sequence, Yaml, YamlIter};
 
 #[cfg(feature = "encoding")]
 mod encoding;

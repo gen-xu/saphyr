@@ -1,3 +1,5 @@
+use std::{path::PathBuf, rc::Rc};
+
 use crate::{
     char_traits::{
         is_alpha, is_blank, is_blank_or_breakz, is_break, is_breakz, is_digit, is_flow, is_z,
@@ -15,20 +17,27 @@ pub struct StrInput<'a> {
     /// We must however keep track of how many characters the parser asked us to look ahead for so
     /// that we can return the correct value in [`Self::buflen`].
     lookahead: usize,
+    /// The path of the input if any
+    path: Option<Rc<PathBuf>>,
 }
 
 impl<'a> StrInput<'a> {
     /// Create a new [`StrInput`] with the given str.
     #[must_use]
-    pub fn new(input: &'a str) -> Self {
+    pub fn new(input: &'a str, path: Option<Rc<PathBuf>>) -> Self {
         Self {
             buffer: input,
             lookahead: 0,
+            path,
         }
     }
 }
 
 impl Input for StrInput<'_> {
+    fn path(&self) -> Option<Rc<PathBuf>> {
+        self.path.clone()
+    }
+
     #[inline]
     fn lookahead(&mut self, x: usize) {
         // We already have all characters that we need.
@@ -413,32 +422,32 @@ mod test {
 
     #[test]
     pub fn is_document_start() {
-        let input = StrInput::new("---\n");
+        let input = StrInput::new("---\n", None);
         assert!(input.next_is_document_start());
         assert!(input.next_is_document_indicator());
-        let input = StrInput::new("---");
+        let input = StrInput::new("---", None);
         assert!(input.next_is_document_start());
         assert!(input.next_is_document_indicator());
-        let input = StrInput::new("...\n");
+        let input = StrInput::new("...\n", None);
         assert!(!input.next_is_document_start());
         assert!(input.next_is_document_indicator());
-        let input = StrInput::new("--- ");
+        let input = StrInput::new("--- ", None);
         assert!(input.next_is_document_start());
         assert!(input.next_is_document_indicator());
     }
 
     #[test]
     pub fn is_document_end() {
-        let input = StrInput::new("...\n");
+        let input = StrInput::new("...\n", None);
         assert!(input.next_is_document_end());
         assert!(input.next_is_document_indicator());
-        let input = StrInput::new("...");
+        let input = StrInput::new("...", None);
         assert!(input.next_is_document_end());
         assert!(input.next_is_document_indicator());
-        let input = StrInput::new("---\n");
+        let input = StrInput::new("---\n", None);
         assert!(!input.next_is_document_end());
         assert!(input.next_is_document_indicator());
-        let input = StrInput::new("... ");
+        let input = StrInput::new("... ", None);
         assert!(input.next_is_document_end());
         assert!(input.next_is_document_indicator());
     }

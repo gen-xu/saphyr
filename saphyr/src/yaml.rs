@@ -100,7 +100,7 @@ impl Yaml {
     /// # Errors
     /// Returns `ScanError` when loading fails.
     pub fn load_from_iter<I: Iterator<Item = char>>(source: I) -> Result<Vec<Yaml>, ScanError> {
-        let mut parser = Parser::new(BufferedInput::new(source));
+        let mut parser = Parser::new(BufferedInput::new(source, None));
         Self::load_from_parser(&mut parser)
     }
 

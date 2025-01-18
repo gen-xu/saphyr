@@ -1,6 +1,9 @@
 //! The default loader.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 use hashlink::LinkedHashMap;
 use saphyr_parser::{Event, ScanError, Span, SpannedEventReceiver, TScalarStyle, Tag};
@@ -129,6 +132,13 @@ where
                 } else {
                     // Datatype is not specified, or unrecognized
                     Yaml::from_str(&v)
+                    // if let Ok(value) = v.parse::<i64>() {
+                    //     Yaml::Integer { value, tag }
+                    // } else if let Ok(value) = v.parse::<f64>() {
+                    //     Yaml::Real { value: value.to_string(), tag }
+                    // } else {
+                    //     Yaml::from_str(&v)
+                    // }
                 };
                 self.insert_new_node((Node::from_bare_yaml(node).with_span(span), aid));
             }
@@ -154,17 +164,25 @@ where
         }
         if let Some(parent) = self.doc_stack.last_mut() {
             let parent_node = &mut parent.0;
-            if parent_node.is_array() {
-                parent_node.array_mut().push(node.0);
-            } else if parent_node.is_hash() {
+            if parent_node.is_sequence() {
+                parent_node.sequence_mut().push(node.0);
+            } else if parent_node.is_map() {
                 let cur_key = self.key_stack.last_mut().unwrap();
                 // current node is a key
                 if cur_key.is_badvalue() {
                     *cur_key = node.0;
                 // current node is a value
                 } else {
-                    let hash = parent_node.hash_mut();
-                    hash.insert(cur_key.take(), node.0);
+                    let map = parent_node.map_mut();
+                    if cur_key.is_merge_key() {
+                        let source_map = node.0.into_map();
+                        for (mut k, mut v) in source_map.into_iter() {
+                            map.insert(k.take(), v.take());
+                        }
+                        map.remove(&cur_key.take());
+                    } else {
+                        map.insert(cur_key.take(), node.0);
+                    }
                 }
             }
         } else {
@@ -234,25 +252,31 @@ pub trait LoadableYamlNode: Clone + std::hash::Hash + Eq {
     fn from_bare_yaml(yaml: Yaml) -> Self;
 
     /// Return whether the YAML node is an array.
-    fn is_array(&self) -> bool;
+    fn is_sequence(&self) -> bool;
 
     /// Return whether the YAML node is a hash.
-    fn is_hash(&self) -> bool;
+    fn is_map(&self) -> bool;
 
     /// Return whether the YAML node is `BadValue`.
     fn is_badvalue(&self) -> bool;
+
+    fn is_merge_key(&self) -> bool;
+
+    fn display(&self) -> String;
 
     /// Retrieve the array variant of the YAML node.
     ///
     /// # Panics
     /// This function panics if `self` is not an array.
-    fn array_mut(&mut self) -> &mut Vec<Self>;
+    fn sequence_mut(&mut self) -> &mut Vec<Self>;
 
     /// Retrieve the hash variant of the YAML node.
     ///
     /// # Panics
     /// This function panics if `self` is not a hash.
-    fn hash_mut(&mut self) -> &mut LinkedHashMap<Self, Self>;
+    fn map_mut(&mut self) -> &mut LinkedHashMap<Self, Self>;
+
+    fn into_map(self) -> LinkedHashMap<Self, Self>;
 
     /// Take the contained node out of `Self`, leaving a `BadValue` in its place.
     #[must_use]
@@ -271,31 +295,53 @@ impl LoadableYamlNode for Yaml {
         yaml
     }
 
-    fn is_array(&self) -> bool {
-        matches!(self, Yaml::Sequence{..})
+    fn display(&self) -> String {
+        format!("{self:?}")
     }
 
-    fn is_hash(&self) -> bool {
-        matches!(self, Yaml::Map{..})
+    fn is_sequence(&self) -> bool {
+        matches!(self, Yaml::Sequence { .. })
+    }
+
+    fn is_map(&self) -> bool {
+        matches!(self, Yaml::Map { .. })
     }
 
     fn is_badvalue(&self) -> bool {
         matches!(self, Yaml::BadValue)
     }
 
-    fn array_mut(&mut self) -> &mut Vec<Self> {
-        if let Yaml::Sequence { value: ref mut x, .. } = self {
+    fn is_merge_key(&self) -> bool {
+        self.as_str().is_some_and(|x| x == "<<")
+    }
+
+    fn sequence_mut(&mut self) -> &mut Vec<Self> {
+        if let Yaml::Sequence {
+            value: ref mut x, ..
+        } = self
+        {
             x
         } else {
             panic!("Called array_mut on a non-array");
         }
     }
 
-    fn hash_mut(&mut self) -> &mut LinkedHashMap<Self, Self> {
-        if let Yaml::Map { value: ref mut x, .. } = self {
+    fn into_map(self) -> LinkedHashMap<Self, Self> {
+        if let Yaml::Map { value, .. } = self {
+            value
+        } else {
+            panic!("Called into_map on a non-map");
+        }
+    }
+
+    fn map_mut(&mut self) -> &mut LinkedHashMap<Self, Self> {
+        if let Yaml::Map {
+            value: ref mut x, ..
+        } = self
+        {
             x
         } else {
-            panic!("Called hash_mut on a non-hash");
+            panic!("Called map_mut on a non-map");
         }
     }
 

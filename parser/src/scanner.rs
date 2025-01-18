@@ -9,7 +9,7 @@
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_sign_loss)]
 
-use std::{char, collections::VecDeque, error::Error, fmt};
+use std::{char, collections::VecDeque, error::Error, fmt, path::PathBuf, rc::Rc};
 
 use crate::{
     char_traits::{
@@ -77,11 +77,22 @@ impl Marker {
     pub fn col(&self) -> usize {
         self.col
     }
+
+    /// Create a new [`Marker`] at all 0.
+    pub const fn none() -> Marker {
+        Marker {
+            index: 0,
+            line: 0,
+            col: 0,
+        }
+    }
 }
 
 /// A range of locations in a Yaml document.
-#[derive(Clone, Copy, PartialEq, Debug, Eq, Default)]
+#[derive(Clone, PartialEq, Debug, Eq, Default)]
 pub struct Span {
+    /// The file that the span is in.
+    pub file: Option<Rc<PathBuf>>,
     /// The start (inclusive) of the range.
     pub start: Marker,
     /// The end (exclusive) of the range.
@@ -91,8 +102,16 @@ pub struct Span {
 impl Span {
     /// Create a new [`Span`] for the given range.
     #[must_use]
-    pub fn new(start: Marker, end: Marker) -> Span {
-        Span { start, end }
+    pub fn new(start: Marker, end: Marker, file: Option<Rc<PathBuf>>) -> Span {
+        Span { start, end, file }
+    }
+
+    pub const fn none() -> Span {
+        Span {
+            start: Marker::none(),
+            end: Marker::none(),
+            file: None,
+        }
     }
 
     /// Create a empty [`Span`] at a given location.
@@ -102,10 +121,11 @@ impl Span {
     ///
     /// [`SequenceEnd`]: crate::Event::SequenceEnd
     #[must_use]
-    pub fn empty(mark: Marker) -> Span {
+    pub fn empty(mark: Marker, file: Option<Rc<PathBuf>>) -> Span {
         Span {
             start: mark,
             end: mark,
+            file,
         }
     }
 }
@@ -514,6 +534,10 @@ impl<T: Input> Scanner<T> {
         }
     }
 
+    pub fn path(&self) -> Option<Rc<PathBuf>> {
+        self.input.path()
+    }
+
     /// Get a copy of the last error that was encountered, if any.
     ///
     /// This does not clear the error state and further calls to [`Self::get_error`] will return (a
@@ -906,7 +930,7 @@ impl<T: Input> Scanner<T> {
         self.stream_start_produced = true;
         self.allow_simple_key();
         self.tokens.push_back(Token(
-            Span::empty(mark),
+            Span::empty(mark, self.input.path()),
             TokenType::StreamStart(TEncoding::Utf8),
         ));
         self.simple_keys.push(SimpleKey::new(Marker::new(0, 0, 0)));
@@ -932,8 +956,10 @@ impl<T: Input> Scanner<T> {
         self.remove_simple_key()?;
         self.disallow_simple_key();
 
-        self.tokens
-            .push_back(Token(Span::empty(self.mark), TokenType::StreamEnd));
+        self.tokens.push_back(Token(
+            Span::empty(self.mark, self.input.path()),
+            TokenType::StreamEnd,
+        ));
         Ok(())
     }
 
@@ -965,7 +991,7 @@ impl<T: Input> Scanner<T> {
                 self.mark.col += line_len;
                 // XXX return an empty TagDirective token
                 Token(
-                    Span::new(start_mark, self.mark),
+                    Span::new(start_mark, self.mark, self.input.path()),
                     TokenType::TagDirective(String::new(), String::new()),
                 )
                 // return Err(ScanError::new_str(start_mark,
@@ -1005,7 +1031,7 @@ impl<T: Input> Scanner<T> {
         let minor = self.scan_version_directive_number(mark)?;
 
         Ok(Token(
-            Span::new(*mark, self.mark),
+            Span::new(*mark, self.mark, self.input.path()),
             TokenType::VersionDirective(major, minor),
         ))
     }
@@ -1077,7 +1103,7 @@ impl<T: Input> Scanner<T> {
 
         if self.input.next_is_blank_or_breakz() {
             Ok(Token(
-                Span::new(*mark, self.mark),
+                Span::new(*mark, self.mark, self.input.path()),
                 TokenType::TagDirective(handle, prefix),
             ))
         } else {
@@ -1133,7 +1159,7 @@ impl<T: Input> Scanner<T> {
         {
             // XXX: ex 7.2, an empty scalar can follow a secondary tag
             Ok(Token(
-                Span::new(start_mark, self.mark),
+                Span::new(start_mark, self.mark, self.input.path()),
                 TokenType::Tag(handle, suffix),
             ))
         } else {
@@ -1370,7 +1396,10 @@ impl<T: Input> Scanner<T> {
         } else {
             TokenType::Anchor(string)
         };
-        Ok(Token(Span::new(start_mark, self.mark), tok))
+        Ok(Token(
+            Span::new(start_mark, self.mark, self.input.path()),
+            tok,
+        ))
     }
 
     fn fetch_flow_collection_start(&mut self, tok: TokenType) -> ScanResult {
@@ -1394,8 +1423,10 @@ impl<T: Input> Scanner<T> {
 
         self.skip_ws_to_eol(SkipTabs::Yes)?;
 
-        self.tokens
-            .push_back(Token(Span::new(start_mark, self.mark), tok));
+        self.tokens.push_back(Token(
+            Span::new(start_mark, self.mark, self.input.path()),
+            tok,
+        ));
         Ok(())
     }
 
@@ -1424,8 +1455,10 @@ impl<T: Input> Scanner<T> {
             self.adjacent_value_allowed_at = self.mark.index;
         }
 
-        self.tokens
-            .push_back(Token(Span::new(start_mark, self.mark), tok));
+        self.tokens.push_back(Token(
+            Span::new(start_mark, self.mark, self.input.path()),
+            tok,
+        ));
         Ok(())
     }
 
@@ -1441,7 +1474,7 @@ impl<T: Input> Scanner<T> {
         self.skip_ws_to_eol(SkipTabs::Yes)?;
 
         self.tokens.push_back(Token(
-            Span::new(start_mark, self.mark),
+            Span::new(start_mark, self.mark, self.input.path()),
             TokenType::FlowEntry,
         ));
         Ok(())
@@ -1519,8 +1552,10 @@ impl<T: Input> Scanner<T> {
         self.remove_simple_key()?;
         self.allow_simple_key();
 
-        self.tokens
-            .push_back(Token(Span::empty(self.mark), TokenType::BlockEntry));
+        self.tokens.push_back(Token(
+            Span::empty(self.mark, self.input.path()),
+            TokenType::BlockEntry,
+        ));
 
         Ok(())
     }
@@ -1534,7 +1569,8 @@ impl<T: Input> Scanner<T> {
 
         self.skip_n_non_blank(3);
 
-        self.tokens.push_back(Token(Span::new(mark, self.mark), t));
+        self.tokens
+            .push_back(Token(Span::new(mark, self.mark, self.input.path()), t));
         Ok(())
     }
 
@@ -1667,7 +1703,7 @@ impl<T: Input> Scanner<T> {
                 Chomping::Keep => trailing_breaks,
             };
             return Ok(Token(
-                Span::new(start_mark, self.mark),
+                Span::new(start_mark, self.mark, self.input.path()),
                 TokenType::Scalar(style, contents),
             ));
         }
@@ -1736,7 +1772,7 @@ impl<T: Input> Scanner<T> {
         }
 
         Ok(Token(
-            Span::new(start_mark, self.mark),
+            Span::new(start_mark, self.mark, self.input.path()),
             TokenType::Scalar(style, string),
         ))
     }
@@ -2014,7 +2050,7 @@ impl<T: Input> Scanner<T> {
             TScalarStyle::DoubleQuoted
         };
         Ok(Token(
-            Span::new(start_mark, self.mark),
+            Span::new(start_mark, self.mark, self.input.path()),
             TokenType::Scalar(style, string),
         ))
     }
@@ -2303,7 +2339,7 @@ impl<T: Input> Scanner<T> {
             ))
         } else {
             Ok(Token(
-                Span::new(start_mark, end_mark),
+                Span::new(start_mark, end_mark, self.input.path()),
                 TokenType::Scalar(TScalarStyle::Plain, string),
             ))
         }
@@ -2346,8 +2382,10 @@ impl<T: Input> Scanner<T> {
                 "tabs disallowed in this context",
             ));
         }
-        self.tokens
-            .push_back(Token(Span::new(start_mark, self.mark), TokenType::Key));
+        self.tokens.push_back(Token(
+            Span::new(start_mark, self.mark, self.input.path()),
+            TokenType::Key,
+        ));
         Ok(())
     }
 
@@ -2406,7 +2444,7 @@ impl<T: Input> Scanner<T> {
 
         if sk.possible {
             // insert simple key
-            let tok = Token(Span::empty(sk.mark), TokenType::Key);
+            let tok = Token(Span::empty(sk.mark, self.input.path()), TokenType::Key);
             self.insert_token(sk.token_number - self.tokens_parsed, tok);
             if is_implicit_flow_mapping {
                 if sk.mark.line < start_mark.line {
@@ -2417,7 +2455,10 @@ impl<T: Input> Scanner<T> {
                 }
                 self.insert_token(
                     sk.token_number - self.tokens_parsed,
-                    Token(Span::empty(sk.mark), TokenType::FlowMappingStart),
+                    Token(
+                        Span::empty(sk.mark, self.input.path()),
+                        TokenType::FlowMappingStart,
+                    ),
                 );
             }
 
@@ -2434,8 +2475,10 @@ impl<T: Input> Scanner<T> {
             self.disallow_simple_key();
         } else {
             if is_implicit_flow_mapping {
-                self.tokens
-                    .push_back(Token(Span::empty(start_mark), TokenType::FlowMappingStart));
+                self.tokens.push_back(Token(
+                    Span::empty(start_mark, self.input.path()),
+                    TokenType::FlowMappingStart,
+                ));
             }
             // The ':' indicator follows a complex key.
             if self.flow_level == 0 {
@@ -2461,8 +2504,10 @@ impl<T: Input> Scanner<T> {
                 self.disallow_simple_key();
             }
         }
-        self.tokens
-            .push_back(Token(Span::empty(start_mark), TokenType::Value));
+        self.tokens.push_back(Token(
+            Span::empty(start_mark, self.input.path()),
+            TokenType::Value,
+        ));
 
         Ok(())
     }
@@ -2497,8 +2542,13 @@ impl<T: Input> Scanner<T> {
             self.indent = col as isize;
             let tokens_parsed = self.tokens_parsed;
             match number {
-                Some(n) => self.insert_token(n - tokens_parsed, Token(Span::empty(mark), tok)),
-                None => self.tokens.push_back(Token(Span::empty(mark), tok)),
+                Some(n) => self.insert_token(
+                    n - tokens_parsed,
+                    Token(Span::empty(mark, self.input.path()), tok),
+                ),
+                None => self
+                    .tokens
+                    .push_back(Token(Span::empty(mark, self.input.path()), tok)),
             }
         }
     }
@@ -2516,8 +2566,10 @@ impl<T: Input> Scanner<T> {
             let indent = self.indents.pop().unwrap();
             self.indent = indent.indent;
             if indent.needs_block_end {
-                self.tokens
-                    .push_back(Token(Span::empty(self.mark), TokenType::BlockEnd));
+                self.tokens.push_back(Token(
+                    Span::empty(self.mark, self.input.path()),
+                    TokenType::BlockEnd,
+                ));
             }
         }
     }
@@ -2589,8 +2641,10 @@ impl<T: Input> Scanner<T> {
             if *implicit_mapping == ImplicitMappingState::Inside {
                 self.flow_mapping_started = false;
                 *implicit_mapping = ImplicitMappingState::Possible;
-                self.tokens
-                    .push_back(Token(Span::empty(mark), TokenType::FlowMappingEnd));
+                self.tokens.push_back(Token(
+                    Span::empty(mark, self.input.path()),
+                    TokenType::FlowMappingEnd,
+                ));
             }
         }
     }
