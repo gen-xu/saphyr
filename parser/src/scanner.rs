@@ -46,35 +46,35 @@ pub enum TScalarStyle {
 #[derive(Clone, Copy, PartialEq, Debug, Eq, Default)]
 pub struct Marker {
     /// The index (in chars) in the input string.
-    index: usize,
+    index: u32,
     /// The line (1-indexed).
-    line: usize,
+    line: u32,
     /// The column (1-indexed).
-    col: usize,
+    col: u32,
 }
 
 impl Marker {
     /// Create a new [`Marker`] at the given position.
     #[must_use]
-    pub fn new(index: usize, line: usize, col: usize) -> Marker {
+    pub fn new(index: u32, line: u32, col: u32) -> Marker {
         Marker { index, line, col }
     }
 
     /// Return the index (in bytes) of the marker in the source.
     #[must_use]
-    pub fn index(&self) -> usize {
+    pub fn index(&self) -> u32 {
         self.index
     }
 
     /// Return the line of the marker in the source.
     #[must_use]
-    pub fn line(&self) -> usize {
+    pub fn line(&self) -> u32 {
         self.line
     }
 
     /// Return the column of the marker in the source.
     #[must_use]
-    pub fn col(&self) -> usize {
+    pub fn col(&self) -> u32 {
         self.col
     }
 
@@ -319,7 +319,7 @@ struct SimpleKey {
     /// This is the index in the scanner, which takes into account both the tokens that have been
     /// emitted and those about to be emitted. See [`Scanner::tokens_parsed`] and
     /// [`Scanner::tokens`] for more details.
-    token_number: usize,
+    token_number: u32,
     /// The position at which the token the [`SimpleKey`] refers to is.
     mark: Marker,
 }
@@ -340,7 +340,7 @@ impl SimpleKey {
 #[derive(Clone, Debug, Default)]
 struct Indent {
     /// The former indentation level.
-    indent: isize,
+    indent: i32,
     /// Whether, upon closing, this indents generates a `BlockEnd` token.
     ///
     /// There are levels of indentation which do not start a block. Examples of this would be:
@@ -429,7 +429,7 @@ pub struct Scanner<T> {
     stream_end_produced: bool,
     /// In some flow contexts, the value of a mapping is allowed to be adjacent to the `:`. When it
     /// is, the index at which the `:` may be must be stored in `adjacent_value_allowed_at`.
-    adjacent_value_allowed_at: usize,
+    adjacent_value_allowed_at: u32,
     /// Whether a simple key could potentially start at the current position.
     ///
     /// Simple keys are the opposite of complex keys which are keys starting with `?`.
@@ -440,7 +440,7 @@ pub struct Scanner<T> {
     /// are.
     simple_keys: Vec<SimpleKey>,
     /// The current indentation level.
-    indent: isize,
+    indent: i32,
     /// List of all block indentation levels we are in (except the current one).
     indents: Vec<Indent>,
     /// Level of nesting of flow sequences.
@@ -448,7 +448,7 @@ pub struct Scanner<T> {
     /// The number of tokens that have been returned from the scanner.
     ///
     /// This excludes the tokens from [`Self::tokens`].
-    tokens_parsed: usize,
+    tokens_parsed: u32,
     /// Whether a token is ready to be taken from [`Self::tokens`].
     token_available: bool,
     /// Whether all characters encountered since the last newline were whitespace.
@@ -568,7 +568,7 @@ impl<T: Input> Scanner<T> {
 
     /// Consume the next characters. It is assumed none of the next characters are blanks.
     #[inline]
-    fn skip_n_non_blank(&mut self, count: usize) {
+    fn skip_n_non_blank(&mut self, count: u32) {
         self.input.skip_n(count);
 
         self.mark.index += count;
@@ -646,10 +646,10 @@ impl<T: Input> Scanner<T> {
     }
 
     /// Insert a token at the given position.
-    fn insert_token(&mut self, pos: usize, tok: Token) {
-        let old_len = self.tokens.len();
+    fn insert_token(&mut self, pos: u32, tok: Token) {
+        let old_len = self.tokens.len() as u32;
         assert!(pos <= old_len);
-        self.tokens.insert(pos, tok);
+        self.tokens.insert(pos as usize, tok);
     }
 
     fn allow_simple_key(&mut self) {
@@ -682,7 +682,7 @@ impl<T: Input> Scanner<T> {
         self.stale_simple_keys()?;
 
         let mark = self.mark;
-        self.unroll_indent(mark.col as isize);
+        self.unroll_indent(mark.col as i32);
 
         self.input.lookahead(4);
 
@@ -709,7 +709,7 @@ impl<T: Input> Scanner<T> {
             }
         }
 
-        if (self.mark.col as isize) < self.indent {
+        if (self.mark.col as i32) < self.indent {
             return Err(ScanError::new_str(self.mark, "invalid indentation"));
         }
 
@@ -850,7 +850,7 @@ impl<T: Input> Scanner<T> {
                 // indented. Also, tabs are allowed anywhere in it if it has no content.
                 '\t' if self.is_within_block()
                     && self.leading_whitespace
-                    && (self.mark.col as isize) < self.indent =>
+                    && (self.mark.col as i32) < self.indent =>
                 {
                     self.skip_ws_to_eol(SkipTabs::Yes)?;
                     // If we have content on that line with a tab, return an error.
@@ -1063,7 +1063,7 @@ impl<T: Input> Scanner<T> {
 
     fn scan_version_directive_number(&mut self, mark: &Marker) -> Result<u32, ScanError> {
         let mut val = 0u32;
-        let mut length = 0usize;
+        let mut length = 0u32;
         while let Some(digit) = self.input.look_ch().to_digit(10) {
             if length + 1 > 9 {
                 return Err(ScanError::new_str(
@@ -1309,7 +1309,7 @@ impl<T: Input> Scanner<T> {
     }
 
     fn scan_uri_escapes(&mut self, mark: &Marker) -> Result<char, ScanError> {
-        let mut width = 0usize;
+        let mut width = 0u32;
         let mut code = 0u32;
         loop {
             self.input.lookahead(3);
@@ -1587,8 +1587,8 @@ impl<T: Input> Scanner<T> {
     fn scan_block_scalar(&mut self, literal: bool) -> Result<Token, ScanError> {
         let start_mark = self.mark;
         let mut chomping = Chomping::Clip;
-        let mut increment: usize = 0;
-        let mut indent: usize = 0;
+        let mut increment: u32 = 0;
+        let mut indent: u32 = 0;
         let mut trailing_blank: bool;
         let mut leading_blank: bool = false;
         let style = if literal {
@@ -1621,7 +1621,7 @@ impl<T: Input> Scanner<T> {
                         "while scanning a block scalar, found an indentation indicator equal to 0",
                     ));
                 }
-                increment = (self.input.peek() as usize) - ('0' as usize);
+                increment = (self.input.peek() as u32) - ('0' as u32);
                 self.skip_non_blank();
             }
         } else if self.input.next_is_digit() {
@@ -1632,7 +1632,7 @@ impl<T: Input> Scanner<T> {
                 ));
             }
 
-            increment = (self.input.peek() as usize) - ('0' as usize);
+            increment = (self.input.peek() as u32) - ('0' as u32);
             self.skip_non_blank();
             self.input.lookahead(1);
             if self.input.peek() == '+' || self.input.peek() == '-' {
@@ -1670,7 +1670,7 @@ impl<T: Input> Scanner<T> {
 
         if increment > 0 {
             indent = if self.indent >= 0 {
-                (self.indent + increment as isize) as usize
+                (self.indent + increment as i32) as u32
             } else {
                 increment
             }
@@ -1708,7 +1708,7 @@ impl<T: Input> Scanner<T> {
             ));
         }
 
-        if self.mark.col < indent && (self.mark.col as isize) > self.indent {
+        if self.mark.col < indent && (self.mark.col as i32) > self.indent {
             return Err(ScanError::new_str(
                 self.mark,
                 "wrongly indented line in block scalar",
@@ -1811,7 +1811,7 @@ impl<T: Input> Scanner<T> {
             }
 
             // We need to manually update our position; we haven't called a `skip` function.
-            let n_chars = line_buffer.chars().count();
+            let n_chars = line_buffer.chars().count() as u32;
             self.mark.col += n_chars;
             self.mark.index += n_chars;
 
@@ -1824,7 +1824,7 @@ impl<T: Input> Scanner<T> {
     }
 
     /// Skip the block scalar indentation and empty lines.
-    fn skip_block_scalar_indent(&mut self, indent: usize, breaks: &mut String) {
+    fn skip_block_scalar_indent(&mut self, indent: u32, breaks: &mut String) {
         loop {
             // Consume all spaces. Tabs cannot be used as indentation.
             if indent < self.input.bufmaxlen() - 2 {
@@ -1867,7 +1867,7 @@ impl<T: Input> Scanner<T> {
     ///
     /// The function skips over whitespace-only lines and sets `indent` to the the longest
     /// whitespace line that was encountered.
-    fn skip_block_scalar_first_line_indent(&mut self, indent: &mut usize, breaks: &mut String) {
+    fn skip_block_scalar_first_line_indent(&mut self, indent: &mut u32, breaks: &mut String) {
         let mut max_indent = 0;
         loop {
             // Consume all spaces. Tabs cannot be used as indentation.
@@ -1897,7 +1897,7 @@ impl<T: Input> Scanner<T> {
         // ```
         // We need to set the indent to 0 and not 1. In all other cases, the indent must be at
         // least 1. When in the above example, `self.indent` will be set to -1.
-        *indent = max_indent.max((self.indent + 1) as usize);
+        *indent = max_indent.max((self.indent + 1) as u32);
         if self.indent > 0 {
             *indent = (*indent).max(1);
         }
@@ -1949,7 +1949,7 @@ impl<T: Input> Scanner<T> {
                 ));
             }
 
-            if (self.mark.col as isize) < self.indent {
+            if (self.mark.col as i32) < self.indent {
                 return Err(ScanError::new_str(
                     start_mark,
                     "invalid indentation in quoted scalar",
@@ -1975,7 +1975,7 @@ impl<T: Input> Scanner<T> {
                 if self.input.next_is_blank() {
                     // Consume a space or a tab character.
                     if leading_blanks {
-                        if self.input.peek() == '\t' && (self.mark.col as isize) < self.indent {
+                        if self.input.peek() == '\t' && (self.mark.col as i32) < self.indent {
                             return Err(ScanError::new_str(
                                 self.mark,
                                 "tab cannot be used as indentation",
@@ -2113,7 +2113,7 @@ impl<T: Input> Scanner<T> {
         &mut self,
         start_mark: &Marker,
     ) -> Result<char, ScanError> {
-        let mut code_length = 0usize;
+        let mut code_length = 0u32;
         let mut ret = '\0';
 
         match self.input.peek_nth(1) {
@@ -2198,7 +2198,7 @@ impl<T: Input> Scanner<T> {
         let indent = self.indent + 1;
         let start_mark = self.mark;
 
-        if self.flow_level > 0 && (start_mark.col as isize) < indent {
+        if self.flow_level > 0 && (start_mark.col as i32) < indent {
             return Err(ScanError::new_str(
                 start_mark,
                 "invalid indentation in flow construct",
@@ -2253,7 +2253,7 @@ impl<T: Input> Scanner<T> {
                 // We can unroll the first iteration of the loop.
                 string.push(self.input.peek());
                 self.skip_non_blank();
-                string.reserve(self.input.bufmaxlen());
+                string.reserve(self.input.bufmaxlen() as usize);
 
                 // Add content non-blank characters to the scalar.
                 let mut end = false;
@@ -2291,7 +2291,7 @@ impl<T: Input> Scanner<T> {
                     if !self.leading_whitespace {
                         self.buf_whitespaces.push(self.input.peek());
                         self.skip_blank();
-                    } else if (self.mark.col as isize) < indent && self.input.peek() == '\t' {
+                    } else if (self.mark.col as i32) < indent && self.input.peek() == '\t' {
                         // Tabs in an indentation columns are allowed if and only if the line is
                         // empty. Skip to the end of the line.
                         self.skip_ws_to_eol(SkipTabs::Yes)?;
@@ -2320,7 +2320,7 @@ impl<T: Input> Scanner<T> {
             }
 
             // check indentation level
-            if self.flow_level == 0 && (self.mark.col as isize) < indent {
+            if self.flow_level == 0 && (self.mark.col as i32) < indent {
                 break;
             }
         }
@@ -2517,7 +2517,7 @@ impl<T: Input> Scanner<T> {
     /// An indentation level is added only if:
     ///   - We are not in a flow-style construct (which don't have indentation per-se).
     ///   - The current column is further indented than the last indent we have registered.
-    fn roll_indent(&mut self, col: usize, number: Option<usize>, tok: TokenType, mark: Marker) {
+    fn roll_indent(&mut self, col: u32, number: Option<u32>, tok: TokenType, mark: Marker) {
         if self.flow_level > 0 {
             return;
         }
@@ -2525,7 +2525,7 @@ impl<T: Input> Scanner<T> {
         // If the last indent was a non-block indent, remove it.
         // This means that we prepared an indent that we thought we wouldn't use, but realized just
         // now that it is a block indent.
-        if self.indent <= col as isize {
+        if self.indent <= col as i32 {
             if let Some(indent) = self.indents.last() {
                 if !indent.needs_block_end {
                     self.indent = indent.indent;
@@ -2534,12 +2534,12 @@ impl<T: Input> Scanner<T> {
             }
         }
 
-        if self.indent < col as isize {
+        if self.indent < col as i32 {
             self.indents.push(Indent {
                 indent: self.indent,
                 needs_block_end: true,
             });
-            self.indent = col as isize;
+            self.indent = col as i32;
             let tokens_parsed = self.tokens_parsed;
             match number {
                 Some(n) => self.insert_token(
@@ -2558,7 +2558,7 @@ impl<T: Input> Scanner<T> {
     /// Indentation levels are popped from the stack while they are further indented than `col`.
     /// If we are in a flow-style construct (which don't have indentation per-se), this function
     /// does nothing.
-    fn unroll_indent(&mut self, col: isize) {
+    fn unroll_indent(&mut self, col: i32) {
         if self.flow_level > 0 {
             return;
         }
@@ -2604,12 +2604,12 @@ impl<T: Input> Scanner<T> {
     fn save_simple_key(&mut self) {
         if self.simple_key_allowed {
             let required = self.flow_level == 0
-                && self.indent == (self.mark.col as isize)
+                && self.indent == (self.mark.col as i32)
                 && self.indents.last().unwrap().needs_block_end;
             let mut sk = SimpleKey::new(self.mark);
             sk.possible = true;
             sk.required = required;
-            sk.token_number = self.tokens_parsed + self.tokens.len();
+            sk.token_number = self.tokens_parsed + self.tokens.len() as u32;
 
             self.simple_keys.pop();
             self.simple_keys.push(sk);

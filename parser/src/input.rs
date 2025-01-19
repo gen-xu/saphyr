@@ -36,15 +36,15 @@ pub trait Input {
     ///
     /// Implementers of [`Input`] must _not_ load more than `count` characters into the buffer. The
     /// parser tracks how many characters are loaded in the buffer and acts accordingly.
-    fn lookahead(&mut self, count: usize);
+    fn lookahead(&mut self, count: u32);
 
     /// Return the number of buffered characters in `self`.
     #[must_use]
-    fn buflen(&self) -> usize;
+    fn buflen(&self) -> u32;
 
     /// Return the capacity of the buffer in `self`.
     #[must_use]
-    fn bufmaxlen(&self) -> usize;
+    fn bufmaxlen(&self) -> u32;
 
     /// Return whether the buffer (!= stream) is empty.
     #[inline]
@@ -72,7 +72,7 @@ pub trait Input {
     fn skip(&mut self);
 
     /// Consume the next `count` character.
-    fn skip_n(&mut self, count: usize);
+    fn skip_n(&mut self, count: u32);
 
     /// Return the next character, without consuming it.
     ///
@@ -91,7 +91,7 @@ pub trait Input {
     /// This function assumes that the n-th character in the input has already been fetched through
     /// [`Input::lookahead`].
     #[must_use]
-    fn peek_nth(&self, n: usize) -> char;
+    fn peek_nth(&self, n: u32) -> char;
 
     /// Look for the next character and return it.
     ///
@@ -120,7 +120,7 @@ pub trait Input {
     /// [`Input::lookahead`].
     #[inline]
     #[must_use]
-    fn nth_char_is(&self, n: usize, c: char) -> bool {
+    fn nth_char_is(&self, n: u32, c: char) -> bool {
         self.peek_nth(n) == c
     }
 
@@ -192,7 +192,7 @@ pub trait Input {
     /// Errors if a comment is encountered but it was not preceded by a whitespace. In that event,
     /// the first tuple element will contain the number of characters consumed prior to reaching
     /// the `#`.
-    fn skip_ws_to_eol(&mut self, skip_tabs: SkipTabs) -> (usize, Result<SkipTabs, &'static str>) {
+    fn skip_ws_to_eol(&mut self, skip_tabs: SkipTabs) -> (u32, Result<SkipTabs, &'static str>) {
         let mut encountered_tab = false;
         let mut has_yaml_ws = false;
         let mut chars_consumed = 0;
@@ -384,7 +384,7 @@ pub trait Input {
     ///
     /// [breakz]: is_breakz
     #[inline]
-    fn skip_while_non_breakz(&mut self) -> usize {
+    fn skip_while_non_breakz(&mut self) -> u32 {
         let mut count = 0;
         while !is_breakz(self.look_ch()) {
             count += 1;
@@ -402,7 +402,7 @@ pub trait Input {
     /// be used to advance the index and column, since no end-of-line character will be consumed.
     ///
     /// [blanks]: is_blank
-    fn skip_while_blank(&mut self) -> usize {
+    fn skip_while_blank(&mut self) -> u32 {
         let mut n_chars = 0;
         while is_blank(self.look_ch()) {
             n_chars += 1;
@@ -418,7 +418,7 @@ pub trait Input {
     /// # Return
     /// Return the number of characters that were consumed. The number of characters returned can
     /// be used to advance the index and column, since no end-of-line character will be consumed.
-    fn fetch_while_is_alpha(&mut self, out: &mut String) -> usize {
+    fn fetch_while_is_alpha(&mut self, out: &mut String) -> u32 {
         let mut n_chars = 0;
         while is_alpha(self.look_ch()) {
             n_chars += 1;

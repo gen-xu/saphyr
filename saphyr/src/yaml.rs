@@ -29,11 +29,11 @@ use crate::{loader::parse_f64, YamlLoader};
 pub enum Yaml {
     /// Float types are stored as String and parsed on demand.
     /// Note that `f64` does NOT implement Eq trait and can NOT be stored in `BTreeMap`.
-    Real { value: String, tag: Option<Tag> },
+    Real { value: Box<str>, tag: Option<Tag> },
     /// YAML int is stored as i64.
     Integer { value: i64, tag: Option<Tag> },
     /// YAML scalar.
-    String { value: String, tag: Option<Tag> },
+    String { value: Box<str>, tag: Option<Tag> },
     /// YAML bool, e.g. `true` or `false`.
     Boolean { value: bool, tag: Option<Tag> },
     /// YAML sequence, can be accessed as a `Vec`.
@@ -129,7 +129,7 @@ impl Yaml {
     define_into!(into_bool, bool, Boolean);
     define_into!(into_hash, Map, Map);
     define_into!(into_i64, i64, Integer);
-    define_into!(into_string, String, String);
+    define_into!(into_string, Box<str>, String);
     define_into!(into_vec, Sequence, Sequence);
 
     define_is!(is_alias, Self::Alias(_));
@@ -254,12 +254,12 @@ impl Yaml {
                     }
                 } else if parse_f64(v).is_some() {
                     Yaml::Real {
-                        value: v.to_owned(),
+                        value: v.to_owned().into_boxed_str(),
                         tag: None,
                     }
                 } else {
                     Yaml::String {
-                        value: v.to_owned(),
+                        value: v.to_owned().into_boxed_str(),
                         tag: None,
                     }
                 }
@@ -274,7 +274,7 @@ impl<'a> Index<&'a str> for Yaml {
 
     fn index(&self, idx: &'a str) -> &Yaml {
         let key = Yaml::String {
-            value: idx.to_owned(),
+            value: idx.to_owned().into_boxed_str(),
             tag: None,
         };
         match self.as_hash() {
@@ -293,7 +293,7 @@ impl<'a> IndexMut<&'a str> for Yaml {
     /// This function also panics if `self` is not a [`Yaml::Hash`].
     fn index_mut(&mut self, idx: &'a str) -> &mut Yaml {
         let key = Yaml::String {
-            value: idx.to_owned(),
+            value: idx.to_owned().into_boxed_str(),
             tag: None,
         };
         match self.as_mut_hash() {

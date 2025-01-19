@@ -91,9 +91,9 @@ pub enum Event {
 #[derive(Clone, PartialEq, Debug, Eq, Ord, PartialOrd, Hash)]
 pub struct Tag {
     /// Handle of the tag (`!` included).
-    pub handle: String,
+    pub handle: Box<str>,
     /// The suffix of the tag.
-    pub suffix: String,
+    pub suffix: Box<str>,
 }
 
 impl Event {
@@ -400,7 +400,10 @@ impl<T: Input> Parser<T> {
 
     fn parse(&mut self) -> ParseResult {
         if self.state == State::End {
-            return Ok((Event::StreamEnd, Span::empty(self.scanner.mark(), self.scanner.path())));
+            return Ok((
+                Event::StreamEnd,
+                Span::empty(self.scanner.mark(), self.scanner.path()),
+            ));
         }
         let (ev, mark) = self.state_machine()?;
         Ok((ev, mark))
@@ -436,7 +439,10 @@ impl<T: Input> Parser<T> {
 
         if self.scanner.stream_ended() {
             // XXX has parsed?
-            recv.on_event(Event::StreamEnd, Span::empty(self.scanner.mark(), self.scanner.path()));
+            recv.on_event(
+                Event::StreamEnd,
+                Span::empty(self.scanner.mark(), self.scanner.path()),
+            );
             return Ok(());
         }
         loop {
@@ -1115,19 +1121,20 @@ impl<T: Input> Parser<T> {
                 handle: self
                     .tags
                     .get("!!")
-                    .map_or_else(|| "tag:yaml.org,2002:".to_string(), ToString::to_string),
-                suffix,
+                    .map_or_else(|| "tag:yaml.org,2002:".to_string(), ToString::to_string)
+                    .into_boxed_str(),
+                suffix: suffix.into_boxed_str(),
             })
         } else if handle.is_empty() && suffix == "!" {
             // "!" introduces a local tag. Local tags may have their prefix overridden.
             match self.tags.get("") {
                 Some(prefix) => Ok(Tag {
-                    handle: prefix.to_string(),
-                    suffix,
+                    handle: prefix.to_string().into_boxed_str(),
+                    suffix: suffix.into_boxed_str(),
                 }),
                 None => Ok(Tag {
-                    handle: String::new(),
-                    suffix,
+                    handle: "".to_string().into_boxed_str(),
+                    suffix: suffix.into_boxed_str(),
                 }),
             }
         } else {
@@ -1135,8 +1142,8 @@ impl<T: Input> Parser<T> {
             let prefix = self.tags.get(handle);
             if let Some(prefix) = prefix {
                 Ok(Tag {
-                    handle: prefix.to_string(),
-                    suffix,
+                    handle: prefix.to_string().into_boxed_str(),
+                    suffix: suffix.into_boxed_str(),
                 })
             } else {
                 // Otherwise, it may be a local handle. With a local handle, the handle is set to
@@ -1147,8 +1154,8 @@ impl<T: Input> Parser<T> {
                     Err(ScanError::new_str(span.start, "the handle wasn't declared"))
                 } else {
                     Ok(Tag {
-                        handle: handle.to_string(),
-                        suffix,
+                        handle: handle.to_string().into_boxed_str(),
+                        suffix: suffix.into_boxed_str(),
                     })
                 }
             }

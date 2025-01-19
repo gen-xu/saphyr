@@ -1,9 +1,6 @@
 //! The default loader.
 
-use std::{
-    collections::BTreeMap,
-    sync::{atomic::AtomicBool, Arc},
-};
+use std::{collections::BTreeMap, ops::Deref, sync::Arc};
 
 use hashlink::LinkedHashMap;
 use saphyr_parser::{Event, ScanError, Span, SpannedEventReceiver, TScalarStyle, Tag};
@@ -97,13 +94,16 @@ where
             }
             Event::Scalar(v, style, aid, tag) => {
                 let node = if style != TScalarStyle::Plain {
-                    Yaml::String { value: v, tag }
+                    Yaml::String {
+                        value: v.into_boxed_str(),
+                        tag,
+                    }
                 } else if let Some(Tag {
                     ref handle,
                     ref suffix,
                 }) = tag
                 {
-                    if handle == "tag:yaml.org,2002:" {
+                    if handle.deref() == "tag:yaml.org,2002:" {
                         match suffix.as_ref() {
                             "bool" => {
                                 // "true" or "false"
@@ -117,17 +117,26 @@ where
                                 Ok(value) => Yaml::Integer { value, tag },
                             },
                             "float" => match parse_f64(&v) {
-                                Some(_) => Yaml::Real { value: v, tag },
+                                Some(_) => Yaml::Real {
+                                    value: v.into_boxed_str(),
+                                    tag,
+                                },
                                 None => Yaml::BadValue,
                             },
                             "null" => match v.as_ref() {
                                 "~" | "null" => Yaml::Null,
                                 _ => Yaml::BadValue,
                             },
-                            _ => Yaml::String { value: v, tag },
+                            _ => Yaml::String {
+                                value: v.into_boxed_str(),
+                                tag,
+                            },
                         }
                     } else {
-                        Yaml::String { value: v, tag }
+                        Yaml::String {
+                            value: v.into_boxed_str(),
+                            tag,
+                        }
                     }
                 } else {
                     // Datatype is not specified, or unrecognized

@@ -46,23 +46,47 @@ where
 {
     /// Float types are stored as String and parsed on demand.
     /// Note that `f64` does NOT implement Eq trait and can NOT be stored in `BTreeMap`.
-    Real { value: String, tag: Option<Tag> },
+    Real {
+        /// The value of the YAML node.
+        value: Box<str>,
+        /// The tag of the YAML node.
+        tag: Option<Tag>,
+    },
     /// YAML int is stored as i64.
-    Integer { value: i64, tag: Option<Tag> },
+    Integer {
+        /// The value of the YAML node.
+        value: i64,
+        /// The tag of the YAML node.
+        tag: Option<Tag>,
+    },
     /// YAML scalar.
-    String { value: String, tag: Option<Tag> },
+    String {
+        /// The value of the YAML node.
+        value: Box<str>,
+        /// The tag of the YAML node.
+        tag: Option<Tag>,
+    },
     /// YAML bool, e.g. `true` or `false`.
-    Bool { value: bool, tag: Option<Tag> },
+    Bool {
+        /// The value of the YAML node.
+        value: bool,
+        /// The tag of the YAML node.
+        tag: Option<Tag>,
+    },
     /// YAML array, can be accessed as a `Vec`.
     Sequence {
-        value: AnnotatedSequence<Node>,
+        /// The value of the YAML node.
+        value: Vec<Node>,
+        /// The tag of the YAML node.
         tag: Option<Tag>,
     },
     /// YAML hash, can be accessed as a `LinkedHashMap`.
     ///
     /// Insertion order will match the order of insertion into the map.
     Map {
-        value: AnnotatedMap<Node>,
+        /// The value of the YAML node.
+        value: Map<Node>,
+        /// The tag of the YAML node.
         tag: Option<Tag>,
     },
     /// Alias, not fully supported yet.
@@ -75,12 +99,9 @@ where
     BadValue,
 }
 
-/// The type contained in the [`YamlData::Array`] variant. This corresponds to YAML sequences.
-#[allow(clippy::module_name_repetitions)]
-pub type AnnotatedSequence<Node> = Vec<Node>;
 /// The type contained in the [`YamlData::Hash`] variant. This corresponds to YAML mappings.
 #[allow(clippy::module_name_repetitions)]
-pub type AnnotatedMap<Node> = LinkedHashMap<Node, Node>;
+pub type Map<Node> = LinkedHashMap<Node, Node>;
 
 impl<Node> YamlData<Node>
 where
@@ -89,18 +110,18 @@ where
     define_as!(as_bool, bool, Bool);
     define_as!(as_i64, i64, Integer);
 
-    define_as_ref!(as_map, &AnnotatedMap<Node>, Map);
+    define_as_ref!(as_map, &Map<Node>, Map);
     define_as_ref!(as_str, &str, String);
-    define_as_ref!(as_sequence, &AnnotatedSequence<Node>, Sequence);
+    define_as_ref!(as_sequence, &Vec<Node>, Sequence);
 
-    define_as_mut_ref!(as_map_mut, &mut AnnotatedMap<Node>, Map);
-    define_as_mut_ref!(as_sequence_mut, &mut AnnotatedSequence<Node>, Sequence);
+    define_as_mut_ref!(as_map_mut, &mut Map<Node>, Map);
+    define_as_mut_ref!(as_sequence_mut, &mut Vec<Node>, Sequence);
 
     define_into!(into_bool, bool, Bool);
-    define_into!(into_map, AnnotatedMap<Node>, Map);
+    define_into!(into_map, Map<Node>, Map);
     define_into!(into_i64, i64, Integer);
-    define_into!(into_string, String, String);
-    define_into!(into_sequence, AnnotatedSequence<Node>, Sequence);
+    define_into!(into_string, Box<str>, String);
+    define_into!(into_sequence, Vec<Node>, Sequence);
 
     define_is!(is_alias, Self::Alias(_));
     define_is!(is_sequence, Self::Sequence { .. });
@@ -112,6 +133,11 @@ where
     define_is!(is_real, Self::Real { .. });
     define_is!(is_string, Self::String { .. });
 
+    /// Get the tag of the YAML node.
+    ///
+    /// # Return
+    /// If the node has a tag, return `Some(&Tag)`. Otherwise, return `None`.
+    #[must_use]
     pub fn get_tag(&self) -> Option<&Tag> {
         match self {
             YamlData::Real { tag, .. } => tag.as_ref(),
@@ -189,7 +215,7 @@ where
     /// This function also panics if `self` is not a [`YamlData::Hash`].
     fn index(&self, idx: &'a str) -> &Node {
         let key = Self::String {
-            value: idx.to_owned(),
+            value: idx.to_owned().into_boxed_str(),
             tag: None,
         };
         match self.as_map() {
@@ -211,7 +237,7 @@ where
     /// This function also panics if `self` is not a [`YamlData::Hash`].
     fn index_mut(&mut self, idx: &'a str) -> &mut Node {
         let key = Self::String {
-            value: idx.to_owned(),
+            value: idx.to_owned().into_boxed_str(),
             tag: None,
         };
         match self.as_map_mut() {

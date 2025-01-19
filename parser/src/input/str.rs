@@ -39,21 +39,21 @@ impl Input for StrInput<'_> {
     }
 
     #[inline]
-    fn lookahead(&mut self, x: usize) {
+    fn lookahead(&mut self, x: u32) {
         // We already have all characters that we need.
         // We cannot add '\0's to the buffer should we prematurely reach EOF.
         // Returning '\0's befalls the character-retrieving functions.
-        self.lookahead = self.lookahead.max(x);
+        self.lookahead = self.lookahead.max(x as usize);
     }
 
     #[inline]
-    fn buflen(&self) -> usize {
-        self.lookahead
+    fn buflen(&self) -> u32 {
+        self.lookahead as u32
     }
 
     #[inline]
-    fn bufmaxlen(&self) -> usize {
-        BUFFER_LEN
+    fn bufmaxlen(&self) -> u32 {
+        BUFFER_LEN as u32
     }
 
     fn buf_is_empty(&self) -> bool {
@@ -94,7 +94,7 @@ impl Input for StrInput<'_> {
     }
 
     #[inline]
-    fn skip_n(&mut self, count: usize) {
+    fn skip_n(&mut self, count: u32) {
         let mut chars = self.buffer.chars();
         for _ in 0..count {
             if chars.next().is_none() {
@@ -110,7 +110,7 @@ impl Input for StrInput<'_> {
     }
 
     #[inline]
-    fn peek_nth(&self, n: usize) -> char {
+    fn peek_nth(&self, n: u32) -> char {
         let mut chars = self.buffer.chars();
         for _ in 0..n {
             if chars.next().is_none() {
@@ -132,7 +132,7 @@ impl Input for StrInput<'_> {
     }
 
     #[inline]
-    fn nth_char_is(&self, n: usize, c: char) -> bool {
+    fn nth_char_is(&self, n: u32, c: char) -> bool {
         self.peek_nth(n) == c
     }
 
@@ -192,7 +192,7 @@ impl Input for StrInput<'_> {
         }
     }
 
-    fn skip_ws_to_eol(&mut self, skip_tabs: SkipTabs) -> (usize, Result<SkipTabs, &'static str>) {
+    fn skip_ws_to_eol(&mut self, skip_tabs: SkipTabs) -> (u32, Result<SkipTabs, &'static str>) {
         assert!(!matches!(skip_tabs, SkipTabs::Result(..)));
 
         let mut new_str = self.buffer;
@@ -227,7 +227,7 @@ impl Input for StrInput<'_> {
         if !new_str.is_empty() && new_str.as_bytes()[0] == b'#' {
             if !encountered_tab && !has_yaml_ws {
                 return (
-                    chars_consumed,
+                    chars_consumed as u32,
                     Err("comments must be separated from other tokens by whitespace"),
                 );
             }
@@ -245,7 +245,7 @@ impl Input for StrInput<'_> {
         self.buffer = new_str;
 
         (
-            chars_consumed,
+            chars_consumed as u32,
             Ok(SkipTabs::Result(encountered_tab, has_yaml_ws)),
         )
     }
@@ -321,7 +321,7 @@ impl Input for StrInput<'_> {
         !self.buffer.is_empty() && is_alpha(self.buffer.as_bytes()[0] as char)
     }
 
-    fn skip_while_non_breakz(&mut self) -> usize {
+    fn skip_while_non_breakz(&mut self) -> u32 {
         let mut new_str = self.buffer;
         let mut count = 0;
 
@@ -339,7 +339,7 @@ impl Input for StrInput<'_> {
         count
     }
 
-    fn skip_while_blank(&mut self) -> usize {
+    fn skip_while_blank(&mut self) -> u32 {
         // Since all characters we look for are ascii, we can directly use the byte API of str.
         let mut i = 0;
         while i < self.buffer.len() {
@@ -349,10 +349,10 @@ impl Input for StrInput<'_> {
             i += 1;
         }
         self.buffer = &self.buffer[i..];
-        i
+        i as u32
     }
 
-    fn fetch_while_is_alpha(&mut self, out: &mut String) -> usize {
+    fn fetch_while_is_alpha(&mut self, out: &mut String) -> u32 {
         let mut not_alpha = None;
 
         // Skip while we have alpha characters.
@@ -377,7 +377,7 @@ impl Input for StrInput<'_> {
         out.push_str(&self.buffer[..n_bytes_to_append]);
         self.buffer = remaining_string;
 
-        n_bytes_to_append
+        n_bytes_to_append as u32
     }
 }
 

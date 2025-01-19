@@ -53,11 +53,11 @@ impl<T: Iterator<Item = char>> Input for BufferedInput<T> {
     }
 
     #[inline]
-    fn lookahead(&mut self, count: usize) {
-        if self.buffer.len() >= count {
+    fn lookahead(&mut self, count: u32) {
+        if self.buffer.len() >= count as usize {
             return;
         }
-        for _ in 0..(count - self.buffer.len()) {
+        for _ in 0..(count - self.buffer.len() as u32) {
             self.buffer
                 .push_back(self.input.next().unwrap_or('\0'))
                 .unwrap();
@@ -65,13 +65,13 @@ impl<T: Iterator<Item = char>> Input for BufferedInput<T> {
     }
 
     #[inline]
-    fn buflen(&self) -> usize {
-        self.buffer.len()
+    fn buflen(&self) -> u32 {
+        self.buffer.len() as u32
     }
 
     #[inline]
-    fn bufmaxlen(&self) -> usize {
-        BUFFER_LEN
+    fn bufmaxlen(&self) -> u32 {
+        BUFFER_LEN as u32
     }
 
     #[inline]
@@ -99,8 +99,8 @@ impl<T: Iterator<Item = char>> Input for BufferedInput<T> {
     }
 
     #[inline]
-    fn skip_n(&mut self, count: usize) {
-        self.buffer.drain(0..count);
+    fn skip_n(&mut self, count: u32) {
+        self.buffer.drain(0..count as usize);
     }
 
     #[inline]
@@ -109,7 +109,7 @@ impl<T: Iterator<Item = char>> Input for BufferedInput<T> {
     }
 
     #[inline]
-    fn peek_nth(&self, n: usize) -> char {
-        self.buffer[n]
+    fn peek_nth(&self, n: u32) -> char {
+        self.buffer[n as usize]
     }
 }
