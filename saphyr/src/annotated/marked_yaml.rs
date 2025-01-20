@@ -2,16 +2,19 @@
 //!
 //! This is set aside so as to not clutter `annotated.rs`.
 
-use std::path::Path;
+use std::{collections::VecDeque, path::Path, rc::Rc};
 
 use hashlink::LinkedHashMap;
 use saphyr_parser::{BufferedInput, Input, Parser, ScanError, Span};
 
 use crate::{LoadableYamlNode, Yaml, YamlData, YamlLoader};
 
+/// An error that occurs when loading a YAML document.
 #[derive(Debug)]
 pub enum LoadError {
+    /// An error that occurs when parsing the YAML document.
     Scan(ScanError),
+    /// An error that occurs when reading the file.
     Io(std::io::Error),
 }
 
@@ -45,6 +48,8 @@ pub struct MarkedYaml {
     /// The markers are relative to the start of the input stream that was given to the parser, not
     /// to the start of the document within the input stream.
     pub span: Span,
+    /// The original span of the node, appears when this is a reference yaml node.
+    pub referenced_from: Option<Rc<MarkedYaml>>,
     /// The YAML contents of the node.
     pub data: YamlData<MarkedYaml>,
 }
@@ -61,6 +66,7 @@ impl MarkedYaml {
     pub fn load_from_str(source: &str) -> Result<Vec<Self>, ScanError> {
         Self::load_from_iter(source.chars())
     }
+
     /// Load the given string as an array of YAML documents.
     ///
     /// See the function [`load_from_str`] for more details.
@@ -128,6 +134,7 @@ impl From<YamlData<MarkedYaml>> for MarkedYaml {
     fn from(value: YamlData<MarkedYaml>) -> Self {
         Self {
             span: Span::default(),
+            referenced_from: None,
             data: value,
         }
     }
@@ -137,6 +144,7 @@ impl LoadableYamlNode for MarkedYaml {
     fn from_bare_yaml(yaml: Yaml) -> Self {
         Self {
             span: Span::default(),
+            referenced_from: None,
             data: match yaml {
                 Yaml::Real { value, tag } => YamlData::Real { value, tag },
                 Yaml::Integer { value, tag } => YamlData::Integer { value, tag },
@@ -201,6 +209,7 @@ impl LoadableYamlNode for MarkedYaml {
     fn take(&mut self) -> Self {
         let mut taken_out = MarkedYaml {
             span: Span::default(),
+            referenced_from: None,
             data: YamlData::BadValue,
         };
         std::mem::swap(&mut taken_out, self);
@@ -210,5 +219,60 @@ impl LoadableYamlNode for MarkedYaml {
     fn with_span(mut self, span: Span) -> Self {
         self.span = span;
         self
+    }
+
+    fn span(&self) -> &Span {
+        &self.span
+    }
+    fn set_span_recursive(&mut self, span: Span) {
+        self.span = span.clone();
+        let mut pending_nodes = VecDeque::new();
+        match &mut self.data {
+            YamlData::Sequence { value, .. } => {
+                pending_nodes.extend(value.iter_mut());
+            }
+            YamlData::Map { value, .. } => {
+                pending_nodes.extend(value.values_mut());
+            }
+            _ => {}
+        }
+        while let Some(node) = pending_nodes.pop_front() {
+            node.span = span.clone();
+            match &mut node.data {
+                YamlData::Sequence { value, .. } => {
+                    pending_nodes.extend(value.iter_mut());
+                }
+                YamlData::Map { value, .. } => {
+                    pending_nodes.extend(value.values_mut());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn set_referenced_from_recursive(&mut self, node: Option<Rc<Self>>) {
+        self.referenced_from = node;
+        let mut pending_nodes = VecDeque::new();
+        match &mut self.data {
+            YamlData::Sequence { value, .. } => {
+                pending_nodes.extend(value.iter_mut());
+            }
+            YamlData::Map { value, .. } => {
+                pending_nodes.extend(value.values_mut());
+            }
+            _ => {}
+        }
+        while let Some(node) = pending_nodes.pop_front() {
+            node.referenced_from = self.referenced_from.clone();
+            match &mut node.data {
+                YamlData::Sequence { value, .. } => {
+                    pending_nodes.extend(value.iter_mut());
+                }
+                YamlData::Map { value, .. } => {
+                    pending_nodes.extend(value.values_mut());
+                }
+                _ => {}
+            }
+        }
     }
 }

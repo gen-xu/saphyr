@@ -29,22 +29,49 @@ use crate::{loader::parse_f64, YamlLoader};
 pub enum Yaml {
     /// Float types are stored as String and parsed on demand.
     /// Note that `f64` does NOT implement Eq trait and can NOT be stored in `BTreeMap`.
-    Real { value: Box<str>, tag: Option<Tag> },
+    Real {
+        /// The value of the YAML node.
+        value: Box<str>,
+        /// The tag of the YAML node.
+        tag: Option<Tag>,
+    },
     /// YAML int is stored as i64.
-    Integer { value: i64, tag: Option<Tag> },
+    Integer {
+        /// The value of the YAML node.
+        value: i64,
+        /// The tag of the YAML node.
+        tag: Option<Tag>,
+    },
     /// YAML scalar.
-    String { value: Box<str>, tag: Option<Tag> },
+    String {
+        /// The value of the YAML node.
+        value: Box<str>,
+        /// The tag of the YAML node.
+        tag: Option<Tag>,
+    },
     /// YAML bool, e.g. `true` or `false`.
-    Boolean { value: bool, tag: Option<Tag> },
+    Boolean {
+        /// The value of the YAML node.
+        value: bool,
+        /// The tag of the YAML node.
+        tag: Option<Tag>,
+    },
     /// YAML sequence, can be accessed as a `Vec`.
     Sequence {
+        /// The value of the YAML node.
         value: Sequence,
+        /// The tag of the YAML node.
         tag: Option<Tag>,
     },
     /// YAML mapping, can be accessed as a `LinkedHashMap`.
     ///
     /// Insertion order will match the order of insertion into the map.
-    Map { value: Map, tag: Option<Tag> },
+    Map {
+        /// The value of the YAML node.
+        value: Map,
+        /// The tag of the YAML node.
+        tag: Option<Tag>,
+    },
     /// Alias, not fully supported yet.
     Alias(usize),
     /// YAML null, e.g. `null` or `~`.
@@ -61,6 +88,42 @@ pub type Sequence = Vec<Yaml>;
 pub type Map = LinkedHashMap<Yaml, Yaml>;
 
 impl Yaml {
+    /// Create a new [`Yaml::Integer`] node with the given value.
+    pub fn integer(value: i64) -> Self {
+        Self::Integer { value, tag: None }
+    }
+
+    /// Create a new [`Yaml::String`] node with the given value.
+    pub fn string(value: String) -> Self {
+        Self::String {
+            value: value.into_boxed_str(),
+            tag: None,
+        }
+    }
+
+    /// Create a new [`Yaml::Real`] node with the given value.
+    pub fn real(value: f64) -> Self {
+        Self::Real {
+            value: Box::from(value.to_string()),
+            tag: None,
+        }
+    }
+
+    /// Create a new [`Yaml::Boolean`] node with the given value.
+    pub fn boolean(value: bool) -> Self {
+        Self::Boolean { value, tag: None }
+    }
+
+    /// Create a new [`Yaml::Sequence`] node with the given value.
+    pub fn sequence(value: Sequence) -> Self {
+        Self::Sequence { value, tag: None }
+    }
+
+    /// Create a new [`Yaml::Map`] node with the given value.
+    pub fn map(value: Map) -> Self {
+        Self::Map { value, tag: None }
+    }
+
     /// Load the given string as an array of YAML documents.
     ///
     /// The `source` is interpreted as YAML documents and is parsed. Parsing succeeds if and only
@@ -333,7 +396,9 @@ impl IndexMut<usize> for Yaml {
     /// This function also panics if `self` is not a [`Yaml::Array`] nor a [`Yaml::Hash`].
     fn index_mut(&mut self, idx: usize) -> &mut Yaml {
         match self {
-            Yaml::Sequence { value: sequence, .. } => sequence.index_mut(idx),
+            Yaml::Sequence {
+                value: sequence, ..
+            } => sequence.index_mut(idx),
             Yaml::Map { value: mapping, .. } => {
                 let key = Yaml::Integer {
                     value: i64::try_from(idx).unwrap(),

@@ -1,11 +1,11 @@
 //! The default loader.
 
-use std::{collections::BTreeMap, ops::Deref, sync::Arc};
+use std::{collections::BTreeMap, ops::Deref, rc::Rc, sync::Arc};
 
 use hashlink::LinkedHashMap;
 use saphyr_parser::{Event, ScanError, Span, SpannedEventReceiver, TScalarStyle, Tag};
 
-use crate::{Map, Yaml};
+use crate::{AnnotatedMap, Yaml};
 
 /// Main structure for parsing YAML.
 ///
@@ -79,7 +79,7 @@ where
             Event::MappingStart(aid, tag) => {
                 self.doc_stack.push((
                     Node::from_bare_yaml(Yaml::Map {
-                        value: Map::new(),
+                        value: AnnotatedMap::new(),
                         tag,
                     })
                     .with_span(span),
@@ -156,7 +156,10 @@ where
                     Some(v) => v.clone(),
                     None => Node::from_bare_yaml(Yaml::BadValue),
                 };
-                self.insert_new_node((n.with_span(span), 0));
+                let mut new_node = n.clone().with_span(span);
+                let reference = Rc::new(n);
+                new_node.set_referenced_from_recursive(Some(reference));
+                self.insert_new_node((new_node, 0));
             }
         }
     }
@@ -166,36 +169,36 @@ impl<Node> YamlLoader<Node>
 where
     Node: LoadableYamlNode,
 {
-    fn insert_new_node(&mut self, node: (Node, usize)) {
+    fn insert_new_node(&mut self, (node, aid): (Node, usize)) {
         // valid anchor id starts from 1
-        if node.1 > 0 {
-            self.anchor_map.insert(node.1, node.0.clone());
+        if aid > 0 {
+            self.anchor_map.insert(aid, node.clone());
         }
         if let Some(parent) = self.doc_stack.last_mut() {
             let parent_node = &mut parent.0;
             if parent_node.is_sequence() {
-                parent_node.sequence_mut().push(node.0);
+                parent_node.sequence_mut().push(node);
             } else if parent_node.is_map() {
                 let cur_key = self.key_stack.last_mut().unwrap();
                 // current node is a key
                 if cur_key.is_badvalue() {
-                    *cur_key = node.0;
+                    *cur_key = node;
                 // current node is a value
                 } else {
                     let map = parent_node.map_mut();
                     if cur_key.is_merge_key() {
-                        let source_map = node.0.into_map();
+                        let source_map = node.into_map();
                         for (mut k, mut v) in source_map.into_iter() {
                             map.insert(k.take(), v.take());
                         }
                         map.remove(&cur_key.take());
                     } else {
-                        map.insert(cur_key.take(), node.0);
+                        map.insert(cur_key.take(), node);
                     }
                 }
             }
         } else {
-            self.doc_stack.push(node);
+            self.doc_stack.push((node, aid));
         }
     }
 
@@ -269,8 +272,10 @@ pub trait LoadableYamlNode: Clone + std::hash::Hash + Eq {
     /// Return whether the YAML node is `BadValue`.
     fn is_badvalue(&self) -> bool;
 
+    /// Return whether the YAML node is a merge key, i.e. `<<`.
     fn is_merge_key(&self) -> bool;
 
+    /// Return the display string of the YAML node.
     fn display(&self) -> String;
 
     /// Retrieve the array variant of the YAML node.
@@ -279,23 +284,39 @@ pub trait LoadableYamlNode: Clone + std::hash::Hash + Eq {
     /// This function panics if `self` is not an array.
     fn sequence_mut(&mut self) -> &mut Vec<Self>;
 
-    /// Retrieve the hash variant of the YAML node.
+    /// Retrieve the map variant of the YAML node.
     ///
     /// # Panics
-    /// This function panics if `self` is not a hash.
+    /// This function panics if `self` is not a map.
     fn map_mut(&mut self) -> &mut LinkedHashMap<Self, Self>;
 
+    /// Retrieve the map variant of the YAML node.
+    ///
+    /// # Panics
+    /// This function panics if `self` is not a map.
     fn into_map(self) -> LinkedHashMap<Self, Self>;
 
     /// Take the contained node out of `Self`, leaving a `BadValue` in its place.
     #[must_use]
     fn take(&mut self) -> Self;
 
+    /// Return the span of the node.
+    fn span(&self) -> &Span {
+        const SPAN: &'static Span = &Span::none();
+        SPAN
+    }
+
     /// Provide the marker for the node (builder-style).
     #[inline]
     #[must_use]
     fn with_span(self, _: Span) -> Self {
         self
+    }
+
+    fn set_span_recursive(&mut self, span: Span) {}
+
+    fn set_referenced_from_recursive(&mut self, _: Option<Rc<Self>>) {
+        // do nothing
     }
 }
 

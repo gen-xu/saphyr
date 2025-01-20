@@ -2,7 +2,7 @@ use std::fs::{self, DirEntry};
 
 use libtest_mimic::{run_tests, Arguments, Outcome, Test};
 
-use saphyr::{Hash, Yaml};
+use saphyr::{Map, Yaml};
 use saphyr_parser::{
     Event, Marker, Parser, ScanError, Span, SpannedEventReceiver, TScalarStyle, Tag,
 };
@@ -99,7 +99,7 @@ fn load_tests_from_file(entry: &DirEntry) -> Result<Vec<Test<YamlTest>>> {
     let tests = tests[0].as_vec().ok_or("no test list found in file")?;
 
     let mut result = vec![];
-    let mut current_test = Hash::new();
+    let mut current_test = Map::new();
     for (idx, test_data) in tests.iter().enumerate() {
         let name = if tests.len() > 1 {
             format!("{test_name}-{idx:02}")
@@ -109,12 +109,12 @@ fn load_tests_from_file(entry: &DirEntry) -> Result<Vec<Test<YamlTest>>> {
 
         // Test fields except `fail` are "inherited"
         let test_data = test_data.as_hash().unwrap();
-        current_test.remove(&Yaml::String("fail".into()));
+        current_test.remove(&Yaml::string("fail".into()));
         for (key, value) in test_data.clone() {
             current_test.insert(key, value);
         }
 
-        let current_test = Yaml::Hash(current_test.clone()); // Much better indexing
+        let current_test = Yaml::map(current_test.clone()); // Much better indexing
 
         if current_test["skip"] != Yaml::BadValue {
             continue;
@@ -143,7 +143,7 @@ fn parse_to_events(source: &str) -> Result<EventReporter, ScanError> {
     let mut iter_error = None;
 
     // Parse as string
-    for x in Parser::new_from_str(source) {
+    for x in Parser::new_from_str(source, None) {
         match x {
             Ok(event) => str_events.push(event),
             Err(e) => {
@@ -196,7 +196,7 @@ impl SpannedEventReceiver for EventReporter {
             {
                 self.span_failures.push((
                     format!("event {ev:?}@{span:?} came before event {last_ev:?}@{last_span:?}"),
-                    span,
+                    span.clone(),
                 ));
             }
         }

@@ -37,13 +37,13 @@ fn double_roundtrip(original: &str) {
 
 #[test]
 fn test_escape_character() {
-    let y = Yaml::String("\x1b".to_owned());
+    let y = Yaml::string("\x1b".to_owned());
     roundtrip(&y);
 }
 
 #[test]
 fn test_colon_in_string() {
-    let y = Yaml::String("x: %".to_owned());
+    let y = Yaml::string("x: %".to_owned());
     roundtrip(&y);
 }
 
@@ -60,7 +60,7 @@ fn test_numberlike_strings() {
     ];
 
     for doc in &docs {
-        roundtrip(&Yaml::String((*doc).to_string()));
+        roundtrip(&Yaml::string((*doc).to_string()));
         double_roundtrip(doc);
     }
 }
@@ -69,7 +69,7 @@ fn test_numberlike_strings() {
 #[test]
 fn test_issue133() {
     let doc = Yaml::load_from_str("\"0x123\"").unwrap().pop().unwrap();
-    assert_eq!(doc, Yaml::String("0x123".to_string()));
+    assert_eq!(doc, Yaml::string("0x123".to_string()));
 
     let mut out_str = String::new();
     YamlEmitter::new(&mut out_str).dump(&doc).unwrap();
@@ -79,36 +79,36 @@ fn test_issue133() {
 
 #[test]
 fn test_newline() {
-    let y = Yaml::Array(vec![Yaml::String("\n".to_owned())]);
+    let y = Yaml::sequence(vec![Yaml::string("\n".to_owned())]);
     roundtrip(&y);
 }
 
 #[test]
 fn test_crlf() {
-    let y = Yaml::Array(vec![Yaml::String("\r\n".to_owned())]);
+    let y = Yaml::sequence(vec![Yaml::string("\r\n".to_owned())]);
     roundtrip(&y);
 }
 
 #[test]
 fn test_multiline_noline() {
-    let y = Yaml::Array(vec![Yaml::String("a".to_owned())]);
+    let y = Yaml::sequence(vec![Yaml::string("a".to_owned())]);
     roundtrip_multiline(&y);
 }
 
 #[test]
 fn test_multiline_inner_newline() {
-    let y = Yaml::Array(vec![Yaml::String("a\nb".to_owned())]);
+    let y = Yaml::sequence(vec![Yaml::string("a\nb".to_owned())]);
     roundtrip_multiline(&y);
 }
 
 #[test]
 fn test_multiline_trailing_newline() {
-    let y = Yaml::Array(vec![Yaml::String("a\n".to_owned())]);
+    let y = Yaml::sequence(vec![Yaml::string("a\n".to_owned())]);
     roundtrip_multiline(&y);
 }
 
 #[test]
 fn test_multiline_leading_newline() {
-    let y = Yaml::Array(vec![Yaml::String("\na".to_owned())]);
+    let y = Yaml::sequence(vec![Yaml::string("\na".to_owned())]);
     roundtrip_multiline(&y);
 }

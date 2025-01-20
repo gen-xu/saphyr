@@ -85,7 +85,7 @@ where
     /// Insertion order will match the order of insertion into the map.
     Map {
         /// The value of the YAML node.
-        value: Map<Node>,
+        value: AnnotatedMap<Node>,
         /// The tag of the YAML node.
         tag: Option<Tag>,
     },
@@ -101,7 +101,7 @@ where
 
 /// The type contained in the [`YamlData::Hash`] variant. This corresponds to YAML mappings.
 #[allow(clippy::module_name_repetitions)]
-pub type Map<Node> = LinkedHashMap<Node, Node>;
+pub type AnnotatedMap<Node> = LinkedHashMap<Node, Node>;
 
 impl<Node> YamlData<Node>
 where
@@ -110,15 +110,15 @@ where
     define_as!(as_bool, bool, Bool);
     define_as!(as_i64, i64, Integer);
 
-    define_as_ref!(as_map, &Map<Node>, Map);
+    define_as_ref!(as_map, &AnnotatedMap<Node>, Map);
     define_as_ref!(as_str, &str, String);
     define_as_ref!(as_sequence, &Vec<Node>, Sequence);
 
-    define_as_mut_ref!(as_map_mut, &mut Map<Node>, Map);
+    define_as_mut_ref!(as_map_mut, &mut AnnotatedMap<Node>, Map);
     define_as_mut_ref!(as_sequence_mut, &mut Vec<Node>, Sequence);
 
     define_into!(into_bool, bool, Bool);
-    define_into!(into_map, Map<Node>, Map);
+    define_into!(into_map, AnnotatedMap<Node>, Map);
     define_into!(into_i64, i64, Integer);
     define_into!(into_string, Box<str>, String);
     define_into!(into_sequence, Vec<Node>, Sequence);

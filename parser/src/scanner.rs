@@ -60,7 +60,7 @@ impl Marker {
         Marker { index, line, col }
     }
 
-    /// Return the index (in bytes) of the marker in the source.
+    /// Return the index (in chars) of the marker in the source.
     #[must_use]
     pub fn index(&self) -> u32 {
         self.index
@@ -106,6 +106,7 @@ impl Span {
         Span { start, end, file }
     }
 
+    /// Create a new [`Span`] with no file and no range.
     pub const fn none() -> Span {
         Span {
             start: Marker::none(),

@@ -52,7 +52,7 @@ fn str_to_test_events(docs: &str) -> Vec<TestEvent> {
     let mut iter_events = vec![];
     let mut iter_error = None;
 
-    for x in Parser::new_from_str(docs) {
+    for x in Parser::new_from_str(docs, None) {
         match x {
             Ok(event) => str_events.push(event),
             Err(e) => {

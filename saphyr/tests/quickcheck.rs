@@ -8,7 +8,7 @@ use saphyr::{Yaml, YamlEmitter};
 quickcheck! {
     fn test_check_weird_keys(xs: Vec<String>) -> TestResult {
         let mut out_str = String::new();
-        let input = Yaml::Array(xs.into_iter().map(Yaml::String).collect());
+        let input = Yaml::sequence(xs.into_iter().map(Yaml::string).collect());
         {
             let mut emitter = YamlEmitter::new(&mut out_str);
             emitter.dump(&input).unwrap();

@@ -6,12 +6,12 @@ use saphyr_parser::{Event, Parser, ScanError};
 /// Run the parser through the string, returning all the scalars, and collecting their spans to strings.
 fn run_parser_and_deref_scalar_spans(input: &str) -> Result<Vec<(String, String)>, ScanError> {
     let mut events = vec![];
-    for x in Parser::new_from_str(input) {
+    for x in Parser::new_from_str(input, None) {
         let x = x?;
         if let Event::Scalar(s, ..) = x.0 {
             let start = x.1.start.index();
             let end = x.1.end.index();
-            let input_s = input.chars().skip(start).take(end - start).collect();
+            let input_s = input.chars().skip(start as usize).take((end - start) as usize).collect();
             events.push((s, input_s));
         }
     }
@@ -22,14 +22,18 @@ fn run_parser_and_deref_scalar_spans(input: &str) -> Result<Vec<(String, String)
 fn run_parser_and_deref_seq_spans(input: &str) -> Result<Vec<String>, ScanError> {
     let mut events = vec![];
     let mut start_stack = vec![];
-    for x in Parser::new_from_str(input) {
+    for x in Parser::new_from_str(input, None) {
         let x = x?;
         match x.0 {
             Event::SequenceStart(_, _) => start_stack.push(x.1.start.index()),
             Event::SequenceEnd => {
                 let start = start_stack.pop().unwrap();
                 let end = x.1.end.index();
-                let input_s = input.chars().skip(start).take(end - start).collect();
+                let input_s = input
+                    .chars()
+                    .skip(start as usize)
+                    .take((end - start) as usize)
+                    .collect();
                 events.push(input_s);
             }
             _ => {}

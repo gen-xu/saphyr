@@ -283,7 +283,7 @@ c: [1, 2]
 
     #[test]
     fn test_or() {
-        assert_eq!(Yaml::Null.or(Yaml::Integer(3)), Yaml::Integer(3));
-        assert_eq!(Yaml::Integer(3).or(Yaml::Integer(7)), Yaml::Integer(3));
+        assert_eq!(Yaml::Null.or(Yaml::integer(3)), Yaml::integer(3));
+        assert_eq!(Yaml::integer(3).or(Yaml::integer(7)), Yaml::integer(3));
     }
 }

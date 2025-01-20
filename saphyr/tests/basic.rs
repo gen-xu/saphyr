@@ -174,16 +174,16 @@ fn test_plain_datatype_with_into_methods() {
     let mut out = Yaml::load_from_str(s).unwrap().into_iter();
     let mut doc = out.next().unwrap().into_iter();
 
-    assert_eq!(doc.next().unwrap().into_string().unwrap(), "string");
-    assert_eq!(doc.next().unwrap().into_string().unwrap(), "string");
-    assert_eq!(doc.next().unwrap().into_string().unwrap(), "string");
+    assert_eq!(doc.next().unwrap().into_string().unwrap().as_ref(), "string");
+    assert_eq!(doc.next().unwrap().into_string().unwrap().as_ref(), "string");
+    assert_eq!(doc.next().unwrap().into_string().unwrap().as_ref(), "string");
     assert_eq!(doc.next().unwrap().into_i64().unwrap(), 123);
     assert_eq!(doc.next().unwrap().into_i64().unwrap(), -321);
     assert_eq!(doc.next().unwrap().into_f64().unwrap(), 1.23);
     assert_eq!(doc.next().unwrap().into_f64().unwrap(), -1e4);
     assert_eq!(doc.next().unwrap().into_bool().unwrap(), true);
     assert_eq!(doc.next().unwrap().into_bool().unwrap(), false);
-    assert_eq!(doc.next().unwrap().into_string().unwrap(), "0");
+    assert_eq!(doc.next().unwrap().into_string().unwrap().as_ref(), "0");
     assert_eq!(doc.next().unwrap().into_i64().unwrap(), 100);
     assert_eq!(doc.next().unwrap().into_f64().unwrap(), 2.0);
     assert_eq!(doc.next().unwrap().into_bool().unwrap(), true);
@@ -207,15 +207,15 @@ c: ~
     let first = out.into_iter().next().unwrap();
     let mut iter = first.into_hash().unwrap().into_iter();
     assert_eq!(
-        Some((Yaml::String("b".to_owned()), Yaml::Null)),
+        Some((Yaml::string("b".to_owned()), Yaml::Null)),
         iter.next()
     );
     assert_eq!(
-        Some((Yaml::String("a".to_owned()), Yaml::Null)),
+        Some((Yaml::string("a".to_owned()), Yaml::Null)),
         iter.next()
     );
     assert_eq!(
-        Some((Yaml::String("c".to_owned()), Yaml::Null)),
+        Some((Yaml::string("c".to_owned()), Yaml::Null)),
         iter.next()
     );
     assert_eq!(None, iter.next());

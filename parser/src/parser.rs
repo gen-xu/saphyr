@@ -1214,7 +1214,7 @@ baz: "qux"
             let x = x.unwrap();
             if let Event::MappingStart(_, tag) = x.0 {
                 let tag = tag.unwrap();
-                assert_eq!(tag.handle, "tag:test,2024:");
+                assert_eq!(tag.handle.as_ref(), "tag:test,2024:");
             }
         }
 

@@ -9,7 +9,7 @@ fuzz_target!(|data: &[u8]| {
         let mut iter_events = vec![];
         let mut iter_error = None;
 
-        for x in saphyr_parser::Parser::new_from_str(s) {
+        for x in saphyr_parser::Parser::new_from_str(s, None) {
             match x {
                 Ok(event) => str_events.push(event),
                 Err(e) => {
